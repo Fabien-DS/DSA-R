@@ -1,0 +1,8 @@
+"0",""
+"0","dt %>%"
+"0","  ggplot( aes(x=as.factor(NB_PIECES), y=EXPO, fill=as.factor(NB_PIECES))) +"
+"0","    geom_bar(stat='identity') +"
+"0","    ggtitle('Exposition par NB_PIECES')+"
+"0","    xlab('NB_PIECES') +"
+"0","    ylab('exposition') +"
+"0","    labs(fill = 'NB_PIECES')"

@@ -1,0 +1,24 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1624290345544.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2788872761",
+    "id" : "D622750F",
+    "lastKnownWriteTime" : 1624983342,
+    "last_content_update" : 1624983342966,
+    "path" : "E:/ML_Projects/DSA_TD_R/DSA_TD_R/DSA_TD_R.Rmd",
+    "project_path" : "DSA_TD_R.Rmd",
+    "properties" : {
+        "cursorPosition" : "43,23",
+        "last_setup_crc32" : "40D40676bb338d19",
+        "scrollLine" : "21",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

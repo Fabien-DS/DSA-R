@@ -1,0 +1,8 @@
+"0",""
+"0","dt %>%"
+"0","  ggplot( aes(x=as.factor(TYPE_HABITATION), y=EXPO, fill=as.factor(TYPE_HABITATION))) +"
+"0","    geom_bar(stat='identity') +"
+"0","    ggtitle('Exposition par TYPE_HABITATION')+"
+"0","    xlab('TYPE_HABITATION') +"
+"0","    ylab('exposition') +"
+"0","    labs(fill = 'TYPE_HABITATION')"

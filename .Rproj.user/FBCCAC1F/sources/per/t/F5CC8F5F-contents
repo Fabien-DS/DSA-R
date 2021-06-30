@@ -1,0 +1,630 @@
+---
+title: "DSA 2021 - TD R"
+author: "Fabien FAIVRE"
+date: "21 juin 2021"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Présentation du projet
+
+Dans le cadre de la formation [DSA](https://www.institut-du-risk-management.fr/nos-formations/formations-certifiantes/certificat-data-science-pour-actuariat/), nous avons eu l'occasion d'analyser un jeu de données de tarification MRH à l'occasion d'un Hackathon.
+
+Du fait des ontraintes propres au Hackathon je n'avais pas eu l'occasion de finaliser l'analyse de ce jeu de données.
+Par ailleurs, pour le hackathon, le choix s'était porté sur le logiciel Python.
+
+Ce TD est donc l'occasion de poursuivre l'analyse de ce jeu de données et d'explorer l'usage de packages et d'approches développés par MV Wütrich et disponible sur le site de l'[association suisse des actuaires](https://www.actuarialdatascience.org/ADS-Lectures/Courses/).
+
+# Analyse
+
+## Mise en place de l'environnement
+
+Le code suivant est un ensemble d'utilitaire pour naviguer dans les répertoires relatifs du projet et installer ou charger les packages nécessaires à l'analyse :
+
+```{r echo=T, results='hide', message=FALSE, warning=FALSE}
+if (!require("here")){ 
+  install.packages("here") 
+  library("here")
+}
+
+set_here
+
+LoadPackage <- function (load.lib=c("")) {
+
+  install.lib<-load.lib[!load.lib %in% installed.packages()]
+  for(lib in install.lib) install.packages(lib,dependencies=TRUE)
+  sapply(load.lib,require,character=TRUE)
+  
+}
+
+
+LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT'))
+```
+
+
+# Présentation du jeu de données
+
+Le jeu de données est constitué de 4 fichiers :
+
+```{r data}
+list.files(path=here('data', 'raw'))
+```
+
+Le projet suit un portefeuille d'assurance MRH suivi sur plusieurs années de 2016 à 2018 inclus. 
+L'objectif initial du Hackathon est d'estimer les primes 2019 sur un échantillon de contrats.
+
+
+## expo_train
+
+Le fichier `expo_train.csv` contient la liste des contrats en risques historiquement suivis :
+
+```{r}
+expo_train = read.table(file = here('data', 'raw', 'expo_train.csv'), header=T, sep=',', dec='.', encoding = 'UTF-8', stringsAsFactors = F)
+
+datatable(head(expo_train))
+
+str(expo_train)
+```
+
+Les données ont été prétraitées pour disposer d'**une ligne par période de risque annuelle homogène**.
+
+Pour des raisons d'anonymisation, les identifiants contrats ont été supprimés de sorte qu'il n'est pas possible de suivre l'évolution du risque d'une période sur l'autre. Pour la même raison, il ne sera pas possible dans la construction des jeux de validation et de test de s'assurer que toute l'expérience d'un même assuré est bien intégralement dans un jeu d'entraînement, de validation ou de test.
+
+La signification des colonnes présentes est la suivante :
+
+* **`X`**: variable non nommée. Il s'agit d'un artefact du processus de création du fichier initial. **On ne la prend pas en compte**
+
+* **`EXPO`** : exposition en année risque du contrat. Sa valeur précalculée pour chaque ligne est comprise entre 0 et 1
+```{r echo=FALSE}
+formattable(summary(expo_train$EXPO))
+
+expo_train %>%
+  ggplot( aes(x=EXPO)) +
+    geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +
+    ggtitle("Distribution de EXPO")
+  
+```
+
+
+* **`FORMULE`** : variable catégorielle codant la formule du contrat comprenant 3 niveaux `MEDIUM`, `ESSENTIEL` et `CONFORT`
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(FORMULE) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(FORMULE), y=EXPO, fill=as.factor(FORMULE))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par FORMULE')+
+    xlab('FORMULE') +
+    ylab('exposition') +
+    labs(fill = 'FORMULE')
+  
+```
+
+
+* **`TYPE_RESIDENCE`** : variable catégorielle codant le fait que le bien est une résidence `PRINCIPALE`, ou `SECONDAIRE`
+
+```{r echo=FALSE}
+
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(TYPE_RESIDENCE) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+dt %>%
+  ggplot( aes(x=as.factor(TYPE_RESIDENCE), y=EXPO, fill=as.factor(TYPE_RESIDENCE))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par TYPE_RESIDENCE')+
+    xlab('TYPE_RESIDENCE') +
+    ylab('exposition') +
+    labs(fill = 'TYPE_RESIDENCE')
+  
+```
+
+* **`TYPE_HABITATION`** : variable catégorielle codant le fait que le bien est un `APPARTEMENT`, ou une `MAISON`
+
+```{r echo=FALSE}
+
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(TYPE_HABITATION) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+dt %>%
+  ggplot( aes(x=as.factor(TYPE_HABITATION), y=EXPO, fill=as.factor(TYPE_HABITATION))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par TYPE_HABITATION')+
+    xlab('TYPE_HABITATION') +
+    ylab('exposition') +
+    labs(fill = 'TYPE_HABITATION')
+  
+```
+
+
+* **`NB_PIECES`** : variable numérique indiquant le nombre de pièces du logement
+
+```{r echo=FALSE}
+
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(NB_PIECES) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+dt %>%
+  ggplot( aes(x=as.factor(NB_PIECES), y=EXPO, fill=as.factor(NB_PIECES))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par NB_PIECES')+
+    xlab('NB_PIECES') +
+    ylab('exposition') +
+    labs(fill = 'NB_PIECES')
+  
+```
+
+
+* **`SITUATION_JURIDIQUE`** : variable catégorielle indiquant si le souscripteur est prorpiétaire (`PROPRIO`) ou locataire (`LOCATAIRE`) du logement assuré 
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(SITUATION_JURIDIQUE) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(SITUATION_JURIDIQUE), y=EXPO, fill=as.factor(SITUATION_JURIDIQUE))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par SITUATION_JURIDIQUE')+
+    xlab('SITUATION_JURIDIQUE') +
+    ylab('exposition') +
+    labs(fill = 'SITUATION_JURIDIQUE')
+  
+```
+
+
+
+* **`NIVEAU_JURIDIQUE`** :  variable catégorielle codant le niveau de couverture de la garantie juridique
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(NIVEAU_JURIDIQUE) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(NIVEAU_JURIDIQUE), y=EXPO, fill=as.factor(NIVEAU_JURIDIQUE))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par NIVEAU_JURIDIQUE')+
+    xlab('NIVEAU_JURIDIQUE') +
+    ylab('exposition') +
+    labs(fill = 'NIVEAU_JURIDIQUE')
+  
+```
+
+
+* **`VALEUR_DES_BIENS`** : variable numérique reflétant la valeur couverte du contenu du logement
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(VALEUR_DES_BIENS) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(VALEUR_DES_BIENS), y=EXPO, fill=as.factor(VALEUR_DES_BIENS))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par VALEUR_DES_BIENS')+
+    xlab('VALEUR_DES_BIENS') +
+    ylab('exposition') +
+    labs(fill = 'VALEUR_DES_BIENS')
+  
+```
+
+* **`OBJETS_DE_VALEUR`** : variable catégorielle codant le niveau de couverture des objets 
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(OBJETS_DE_VALEUR) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(OBJETS_DE_VALEUR), y=EXPO, fill=as.factor(OBJETS_DE_VALEUR))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par OBJETS_DE_VALEUR')+
+    xlab('OBJETS_DE_VALEUR') +
+    ylab('exposition') +
+    labs(fill = 'OBJETS_DE_VALEUR')
+  
+```
+
+
+* **`ZONIER`** : variable catégorielle codant la zone du bien assuré. Le code est constitué d'une lettre représentant une zone et d'un nombre représentant une partie de la zone
+
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(ZONIER) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+region <- gsub('[0-9]', '', dt$ZONIER)
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(ZONIER), y=EXPO, fill=as.factor(region))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par ZONIER')+
+    xlab('ZONIER') +
+    ylab('exposition') +
+    labs(fill = 'ZONIER') +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+```
+
+
+* **`NBSIN_TYPE1_AN1`** : variable numérique indiquant le nombre de sinistre de type 1 l'année précédente
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(NBSIN_TYPE1_AN1) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(NBSIN_TYPE1_AN1), y=EXPO, fill=as.factor(NBSIN_TYPE1_AN1))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par NBSIN_TYPE1_AN1')+
+    xlab('NBSIN_TYPE1_AN1') +
+    ylab('exposition') +
+    labs(fill = 'NBSIN_TYPE1_AN1')
+  
+```
+
+
+* **`NBSIN_TYPE1_AN2`** : variable numérique indiquant le nombre de sinistre de type 1 il y a 2 ans
+
+**ATTENTION** : comme la table ci-dessous le démontre, cette variable présente un problème puisque toutes les lignes ont au moins un sinistre
+
+Comme discuté dans le hackathon **on ignore cette variable**
+
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(NBSIN_TYPE1_AN2) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(NBSIN_TYPE1_AN2), y=EXPO, fill=as.factor(NBSIN_TYPE1_AN2))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par NBSIN_TYPE1_AN2')+
+    xlab('NBSIN_TYPE1_AN2') +
+    ylab('exposition') +
+    labs(fill = 'NBSIN_TYPE1_AN2')
+  
+```
+
+
+* **`NBSIN_TYPE1_AN3`** : variable numérique indiquant le nombre de sinistre de type 1 il y a 3 ans
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(NBSIN_TYPE1_AN3) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(NBSIN_TYPE1_AN3), y=EXPO, fill=as.factor(NBSIN_TYPE1_AN3))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par NBSIN_TYPE1_AN3')+
+    xlab('NBSIN_TYPE1_AN3') +
+    ylab('exposition') +
+    labs(fill = 'NBSIN_TYPE1_AN3')
+  
+```
+
+
+* **`NBSIN_TYPE2_AN1`** : variable numérique indiquant le nombre de sinistre de type 2 l'année précédente
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(NBSIN_TYPE2_AN1) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(NBSIN_TYPE2_AN1), y=EXPO, fill=as.factor(NBSIN_TYPE2_AN1))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par NBSIN_TYPE2_AN1')+
+    xlab('NBSIN_TYPE2_AN1') +
+    ylab('exposition') +
+    labs(fill = 'NBSIN_TYPE2_AN1')
+  
+```
+
+
+* **`NBSIN_TYPE2_AN2`** : variable numérique indiquant le nombre de sinistre de type 2 il y a 2 ans
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(NBSIN_TYPE2_AN2) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(NBSIN_TYPE2_AN2), y=EXPO, fill=as.factor(NBSIN_TYPE2_AN2))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par NBSIN_TYPE2_AN2')+
+    xlab('NBSIN_TYPE2_AN2') +
+    ylab('exposition') +
+    labs(fill = 'NBSIN_TYPE2_AN2')
+  
+```
+
+
+* **`NBSIN_TYPE2_AN3`** : variable numérique indiquant le nombre de sinistre de type 2 il y a 3 ans
+
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(NBSIN_TYPE2_AN3) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(NBSIN_TYPE2_AN3), y=EXPO, fill=as.factor(NBSIN_TYPE2_AN3))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par NBSIN_TYPE2_AN3')+
+    xlab('NBSIN_TYPE2_AN3') +
+    ylab('exposition') +
+    labs(fill = 'NBSIN_TYPE2_AN3')
+  
+```
+
+
+* **`id`** : identifiant du risque, clef de jointure
+
+* **`ANNEE`** : variable catégorielle indiquant l'année d'observation du risque : `2016`, `2017`, `2018`
+```{r echo=FALSE}
+expo_tot <- sum(expo_train$EXPO)
+
+
+dt <-expo_train %>%
+  group_by(ANNEE) %>%
+  summarise(nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+
+
+formattable(dt,
+            align=c('l','r','r', 'r'),
+            list(
+                nb_lignes= accounting,
+                EXPO = accounting,
+                pct_EXPO = percent
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(ANNEE), y=EXPO, fill=as.factor(ANNEE))) +
+    geom_bar(stat='identity') +
+    ggtitle('Exposition par ANNEE')+
+    xlab('ANNEE') +
+    ylab('exposition') +
+    labs(fill = 'ANNEE')
+  
+```
+
+
+## sin_train
+
+Le fichier `expo_train.csv` contient la liste des contrats en risques historiquement suivis :
+
+```{r}
+sin_train = read.table(file = here('data', 'raw', 'sin_train.csv'), header=T, sep=';', dec=',', encoding = 'UTF-8', stringsAsFactors = F)
+
+datatable(head(sin_train))
+
+str(sin_train)
+```
+
+

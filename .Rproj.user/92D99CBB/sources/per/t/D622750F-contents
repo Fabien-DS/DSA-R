@@ -1,0 +1,88 @@
+---
+title: "DSA 2021 - TD R"
+author: "Fabien FAIVRE"
+date: "21 juin 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Présentation du projet
+
+Dans le cadre de la formation [DSA](https://www.institut-du-risk-management.fr/nos-formations/formations-certifiantes/certificat-data-science-pour-actuariat/), nous avons eu l'occasion d'analyser un jeu de données de tarification MRH à l'occasion d'un Hackathon.
+
+Du fait des ontraintes propres au Hackathon je n'avais pas eu l'occasion de finaliser l'analyse de ce jeu de données.
+Par ailleurs, pour le hackathon, le choix s'était porté sur le logiciel Python.
+
+Ce TD est donc l'occasion de poursuivre l'analyse de ce jeu de données et d'explorer l'usage de packages et d'approches développés par MV Wütrich et disponible sur le site de l'[association suisse des actuaires](https://www.actuarialdatascience.org/ADS-Lectures/Courses/).
+
+# Analyse
+
+## Mise en place de l'environnement
+
+Le code suivant est un ensemble d'utilitaire pour naviguer dans les répertoires relatifs du projet et installer ou charger les packages nécessaires à l'analyse :
+
+```{r echo=T, results='hide', message=FALSE, warning=FALSE}
+if (!require("here")){ 
+  install.packages("here") 
+  library("here")
+}
+
+set_here
+
+LoadPackage <- function (load.lib=c("")) {
+
+  install.lib<-load.lib[!load.lib %in% installed.packages()]
+  for(lib in install.lib) install.packages(lib,dependencies=TRUE)
+  sapply(load.lib,require,character=TRUE)
+  
+}
+
+
+LoadPackage(c('Hmisc'))
+```
+
+
+# Présentation du jeu de données
+
+Le jeu de données est constitué de 4 fichiers :
+
+```{r data}
+list.files(path=here('data', 'raw'))
+```
+
+Le projet suit un portefeuille d'assurance MRH suivi sur plusieurs années de 2016 à 2018 inclus. 
+L'objectif initial du Hackathon est d'estimer les primes 2019 sur un échantillon de contrats.
+
+Le fichier `expo_train.csv` contient la liste des contrats en risques historiquement suivis :
+
+```{r}
+expo_train = read.table(file = here('data', 'raw', 'expo_train.csv'), header=T, sep=',', dec='.', encoding = 'UTF-8', stringsAsFactors = F)
+
+head(expo_train)
+
+Hmisc::describe(expo_train)
+```
+
+Les données ont été prétraitées pour disposer d'une ligne par période de risque annuelle homogène.
+Pour des raisons d'anonymisation, les identifiants contrats ont été supprimés de sorte qu'il n'est pas possible de suivre l'évolution du risque d'une période sur l'autre. Pour la même raison, il ne sera pas possible dans la construction des jeux de validation et de test de s'assurer que toute l'expérience d'un même assuré est bien intégralement dans un jeu d'entraînement, de validation ou de test.
+
+La signification des colonnes présentes est la suivante :
+ - `X`: variable non nommée. Il s'agit d'un artefact du processus de création du fichier initial. On ne le prend pas en compte
+ - `EXPO` : exposition en année risque du contrat. Sa valeur précalculée pour chaque ligne est comprise entre 0 et 1
+ - `FORMULE` : variable catégorielle codant la formule du contrat comprenant 3 niveaux `MEDIUM`, `ESSENTIEL` et `CONFORT`
+ - `TYPE_RESIDENCE` : variable catégorielle codant le fait que le bien est une résidence `PRINCIPALE`, ou `SECONDAIRE`
+ - `TYPE_HABITATION` : variable catégorielle codant le fait que le bien est un `APPARTEMENT`, ou une `MAISON`
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
