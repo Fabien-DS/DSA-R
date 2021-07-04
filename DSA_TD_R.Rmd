@@ -48,7 +48,7 @@ LoadPackage <- function (load.lib=c("")) {
 }
 
 
-LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT'))
+LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly'))
 ```
 
 
@@ -655,5 +655,273 @@ dt %>%
     ylab('nombre de lignes') +
     labs(fill = 'NB')
   
+```
+
+
+## fichier combiné
+
+On peut désormais combine les information d'exposition et de sinistres :
+
+```{r}
+mrh <- expo_train %>%
+      left_join(sin_train, by =c('id','ANNEE')) %>%
+      replace_na(list('NB'=0, 'COUT'=0))
+```
+
+N'ayant pas accèsau fichier de test utilisé lors du KAckathon, on dissocie ici le fichier mrh en un fichier `train` (70%), un fichier `val` (20%) et un fichier `test` (10%)
+
+```{r}
+set.seed(42)
+
+trainIndex<- createDataPartition(mrh$NB>=0, p=.7, list=FALSE, time=1)
+
+mrh_train<-mrh[trainIndex,]
+mrh_test<-mrh[ -trainIndex,]
+
+valIndex<- createDataPartition(mrh_test$NB>=0, p=.66, list=FALSE, time=1)
+mrh_val<-mrh_test[ valIndex,]
+mrh_test<-mrh_test[ -valIndex,]
+
+```
+
+Taux de sinistres moyen :
+
+```{r}
+sum(mrh_train$NB)/sum(mrh_train$EXPO)
+
+```
+
+Taux de sinistre par variable :
+
+```{r echo=FALSE}
+
+df <- mrh_train
+feature <- 'FORMULE'
+
+
+dt <-df %>%
+  group_by(df[[feature]], ANNEE) %>%
+  summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO))
+
+
+
+
+fig <- dt %>% plot_ly()
+fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
+         xaxis = list(title = ""),
+         yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
+         yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
+
+
+for (year in unique(dt$ANNEE)) {
+
+      fig <- fig %>% add_trace(
+                     x= dt[[feature]][dt$ANNEE == year], y= dt[['EXPO']][dt$ANNEE == year], type = 'bar', name = paste0('Exposition_', year),
+                     hovertemplate = 'Expo: %{y:.0f}<br>'
+                  )
+      fig<- fig %>% add_trace(
+                     x= dt[[feature]][dt$ANNEE == year], y= dt[['Freq']][dt$ANNEE == year], type = 'scatter', mode = 'lines', yaxis = 'y2', name= paste0('Fréquence_', year),
+                     hovertemplate = 'Freq: %{y:.2%}<br>'
+                    )
+
+}
+fig 
+  
+
+  
+```
+
+
+```{r echo=FALSE}
+
+
+plot_obs_2<-function(df,feature,use_year=T) {
+
+    if (use_year) {
+          dt <-df %>%
+          group_by(df[[feature]], ANNEE) %>%
+          summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO)) %>%
+          rename(feat = 'df[[feature]]')
+    } else {
+          dt <-df %>%
+          group_by(df[[feature]]) %>%
+          summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO)) %>%
+          rename(feat = 'df[[feature]]')
+    }
+    
+    
+    
+    fig <-plot_ly()
+    fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
+             xaxis = list(title = feature),
+             yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
+             yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
+    
+    if (use_year) {
+        for (year in unique(dt$ANNEE)) {
+        
+              dt_temp <- dt %>% filter(ANNEE==year)
+              fig <- fig %>% add_trace( 
+                             x= dt_temp$feat, y= dt_temp$EXPO, type = 'bar', name = paste0('Exposition_', year),
+                             hovertemplate = 'Expo: %{y:.0f}<br>'
+                          )
+              fig<- fig %>% add_trace(
+                             x= dt_temp$feat, y= dt_temp$Freq, type = 'scatter', mode = 'lines', yaxis = 'y2', name= paste0('Fréquence_', year),
+                             hovertemplate = 'Freq: %{y:.2%}<br>'
+                            )
+        
+        }
+    } else {
+              dt_temp <- dt 
+              fig <- fig %>% add_trace( 
+                             x= dt_temp$feat, y= dt_temp$EXPO, type = 'bar', name = 'Exposition',
+                             hovertemplate = 'Expo: %{y:.0f}<br>'
+                          )
+              fig<- fig %>% add_trace(
+                             x= dt_temp$feat, y= dt_temp$Freq, type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
+                             hovertemplate = 'Freq: %{y:.2%}<br>'
+                            )
+      
+    }
+    
+    return(fig) 
+}
+
+
+```
+
+
+```{r}
+
+df = mrh_train
+feature = 'ZONIER'
+
+plot_obs_2(df, feature, use_year = F)
+plot_obs_2(df, feature, use_year = T)
+
+
+```
+
+
+
+
+
+```{r}
+
+plot_obs<-function(dt,feature) {
+  
+      fig <- dt %>% plot_ly()
+      fig <- fig %>% add_trace(
+                     x= dt[[feature]], y= dt[['EXPO']], type = 'bar', name = 'Exposition',
+                     marker = list(color = '#C9EFF9'),
+                     hoverinfo = "text",
+                     text = ~paste(round(EXPO,0), ' années risque')
+                  )
+      fig<- fig %>% add_trace(
+                     x= dt[[feature]], y= dt[['Freq']], type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
+                     hoverinfo = "text",
+                     text = ~paste(round(Freq*100,2), '%')
+                    )
+      fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
+               xaxis = list(title = ""),
+               yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
+               yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
+      
+      
+      return(fig)
+}
+
+```
+
+
+
+```{r}
+
+plot_obs<-function(dt,feature) {
+  
+      fig <- dt %>% plot_ly()
+      fig <- fig %>% add_trace(
+                     x= dt[[feature]], y= dt[['EXPO']], type = 'bar', name = 'Exposition',
+                     marker = list(color = '#C9EFF9'),
+                     hoverinfo = "text",
+                     text = ~paste(round(EXPO,0), ' années risque')
+                  )
+      fig<- fig %>% add_trace(
+                     x= dt[[feature]], y= dt[['Freq']], type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
+                     hoverinfo = "text",
+                     text = ~paste(round(Freq*100,2), '%')
+                    )
+      fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
+               xaxis = list(title = ""),
+               yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
+               yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
+      
+      
+      return(fig)
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+resume <- function(df, feature) {
+    expo_tot <- sum(df$EXPO)
+
+
+    dt <-df %>%
+      group_by(df[[feature]]) %>%
+      summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
+    
+    colnames(dt)[1] <- feature
+    
+    
+    table<- formattable(dt,
+                align=c('l','r', 'r','r', 'r'),
+                list(
+                    nb_lignes= accounting,
+                    EXPO = accounting,
+                    pct_EXPO = percent
+                )
+    )
+  
+    fig<- plot_obs(dt, feature)
+    
+    return(list(table=table, fig=fig))
+}
+```
+
+
+
+### FORMULE
+
+```{r echo=FALSE}
+res<-resume(mrh_train, 'FORMULE')
+
+res$table
+res$fig
+```
+
+
+
+### VALEUR_DES_BIENS
+
+```{r echo=FALSE}
+res<-resume(mrh_train, 'VALEUR_DES_BIENS')
+
+res$table
+res$fig
 ```
 
