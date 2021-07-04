@@ -1,3 +1,0 @@
-"0","sin_train = read.table(file = here('data', 'raw', 'sin_train.csv'), header=T, sep=';', dec=',', encoding = 'UTF-8', stringsAsFactors = F)"
-"0",""
-"0","datatable(head(sin_train))"

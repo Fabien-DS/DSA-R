@@ -628,3 +628,32 @@ str(sin_train)
 ```
 
 
+* **`id`** : identifiant du risque, clef de jointure avec le fichier `expo_train`
+
+* **`NB`** : Nombre de sinistres de la typologie modélisée (inconnue) sur la période d'observation
+
+```{r echo=FALSE}
+
+dt <-sin_train %>%
+  group_by(NB) %>%
+  summarise(nb_lignes = n())
+
+
+formattable(dt,
+            align=c('l','r'),
+            list(
+                nb_lignes= accounting
+            )
+)
+
+
+dt %>%
+  ggplot( aes(x=as.factor(NB), y=nb_lignes, fill=as.factor(NB))) +
+    geom_bar(stat='identity') +
+    ggtitle('Distribution NB')+
+    xlab('NB') +
+    ylab('nombre de lignes') +
+    labs(fill = 'NB')
+  
+```
+

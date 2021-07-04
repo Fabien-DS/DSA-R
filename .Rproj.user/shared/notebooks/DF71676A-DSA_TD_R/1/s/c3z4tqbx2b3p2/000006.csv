@@ -1,3 +1,0 @@
-"0","expo_train = read.table(file = here('data', 'raw', 'expo_train.csv'), header=T, sep=',', dec='.', encoding = 'UTF-8', stringsAsFactors = F)"
-"0",""
-"0","head(expo_train)"
