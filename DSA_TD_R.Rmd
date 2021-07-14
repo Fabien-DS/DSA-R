@@ -7,7 +7,7 @@ output:
     toc: true
     toc_float: true
     toc_collapsed: true
-    toc_depth: 3
+    toc_depth: 4
     number_sections: true
     theme: lumen
 ---
@@ -48,7 +48,7 @@ LoadPackage <- function (load.lib=c("")) {
 }
 
 
-LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly'))
+LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly', 'xgboost', 'flashlight', 'MetricsWeighted'))
 ```
 ## code
 
@@ -1143,13 +1143,257 @@ Dans cette partie, on essaye de modéliser la fréquence des sinistres.
 
 On commence par une modélisation de référence qui consistera en un modèle GLM Poisson classique en tirant partie des enseignements de la partie précédente.
 
+
 ```{r}
-df_train <- mrh_train %>%
-            select(-c('TYPE_HABITATION', 'NIVEAU_JURIDIQUE' )) %>%
-            mutate(
-              N
-            )
+preprocess<- function(dt) {
+            res <- dt %>%
+            mutate( 
+              NB_PIECES = ifelse(is.na(NB_PIECES), 2, NB_PIECES), #2 est le mode de NB_PIECES
+              NBSIN_TYPE1_AN1 = ifelse(NBSIN_TYPE1_AN1==0,0,1), #On regroupe les modalités non stables dans le temps
+              NBSIN_TYPE1_AN3 = ifelse(NBSIN_TYPE1_AN3==0,0,1), #On regroupe les modalités non stables dans le temps
+              REGION =  gsub('[0-9]', '', ZONIER) #création de région
+            ) %>%
+            select(-c('X', 'TYPE_HABITATION', 'NIVEAU_JURIDIQUE', 'NBSIN_TYPE1_AN2', 'NBSIN_TYPE2_AN1', 'NBSIN_TYPE2_AN2', 'NBSIN_TYPE2_AN3'  )) %>% # On supprime les variables sans lien stable dans le temps
+            relocate('id', 'EXPO', 'FORMULE', 'TYPE_RESIDENCE', 'SITUATION_JURIDIQUE', 'OBJETS_DE_VALEUR', 'VALEUR_DES_BIENS', 'NB_PIECES', 'ZONIER', 'REGION', 'NBSIN_TYPE1_AN1', 'NBSIN_TYPE1_AN3', 'ANNEE', 'NB', 'COUT' )
+
+            return(res)
+}
+
+df_train <- preprocess(mrh_train)
+df_val <- preprocess(mrh_val)
+df_test <- preprocess(mrh_test)
+```
+
+
+
+```{r}
+reg0 = glm(NB~1+offset(log(EXPO)),family=poisson,data=df_train)
+
+summary(reg0)
+
+plot(reg0)
+```
+
+
+
+```{r}
+
+fit_glm <- glm(NB ~ FORMULE + TYPE_RESIDENCE + SITUATION_JURIDIQUE + OBJETS_DE_VALEUR + as.factor(VALEUR_DES_BIENS) + as.factor(NB_PIECES) + REGION + as.factor(NBSIN_TYPE1_AN1) + as.factor(NBSIN_TYPE1_AN3) + as.factor(ANNEE), 
+              data=df_train, offset=log(EXPO), family=quasipoisson())
+
+summary(fit_glm)
+
+plot(fit_glm)
 
 ```
+
+```{r}
+x <- c('FORMULE', 'TYPE_RESIDENCE', 'SITUATION_JURIDIQUE','OBJETS_DE_VALEUR', 'VALEUR_DES_BIENS', 'NB_PIECES', 'REGION', 'NBSIN_TYPE1_AN1', 'NBSIN_TYPE1_AN3', 'ANNEE')
+y <- 'NB'
+w <- 'EXPO'
+```
+
+```{r}
+# Input maker
+prep_xgb <- function(dat, x) {
+  data.matrix(dat[, x, drop = FALSE])
+}
+# Data interface to XGBoost
+dtrain <- xgb.DMatrix(
+  prep_xgb(df_train, x), 
+  label = df_train[[y]], 
+  weight = df_train[[w]]
+)
+# Parameters chosen by 5-fold grouped CV
+params_freq <- list(
+  learning_rate = 0.2,
+  max_depth = 5,
+  alpha = 3,
+  lambda = 0.5,
+  max_delta_step = 2,
+  min_split_loss = 0,
+  #  monotone_constraints = c(0,-1,0,0,0,0,0), 
+  #  interaction_constraints = list(4, c(0, 1, 2, 3, 5, 6)),
+  colsample_bytree = 1,
+  subsample = 0.9
+)
+# Fit
+set.seed(1)
+fit_xgb <- xgb.train(
+  params_freq, 
+  data = dtrain,
+  nrounds = 580,
+  objective = "count:poisson",
+  watchlist = list(train = dtrain),
+  print_every_n = 100
+)
+
+# Save and load model
+xgb.save(fit_xgb, "xgb.model")
+fit_xgb <- xgb.load("xgb.model")
+
+```
+
+
+# Model Explanations
+
+The models are ready, so let's shed light into them.
+
+## Setting up explainers
+
+We start by setting up the explainers. These are basically objects that know how to create predictions. 
+
+**Crucial: the prediction function needs to work for subsets of datasets, not just for the original model data set.**
+```{r}
+fl_glm <- flashlight(
+  model = fit_glm, label = "GLM", 
+  predict_function = function(fit, X) predict(fit, X, type = "response")
+)
+
+fl_xgb <- flashlight(
+  model = fit_xgb, label = "XGBoost", 
+  predict_function = function(fit, X) predict(fit, prep_xgb(X, x))
+)
+
+# Combine them and add common elements like reference data
+metrics <- list(`Average deviance` = deviance_poisson, 
+                `Relative deviance reduction` = r_squared_poisson)
+fls <- multiflashlight(list(fl_glm, fl_xgb), data = df_val, 
+                       y = y, w = w, metrics = metrics)
+# Version on canonical scale
+fls_log <- multiflashlight(fls, linkinv = log)
+```
+
+
+
+
+
+
+## Performance
+
+We start to interpret the models by looking at model performance using deviance related metrics.
+
+```{r}
+fillc <- "#E69F00"
+perf <- light_performance(fls)
+perf
+plot(perf, geom = "point") +
+  labs(x = element_blank(), y = element_blank())
+```
+
+## Importance
+
+Next, we consider permutation variable importance. By default `flashlight` uses the first performance metric specified above.
+
+```{r}
+imp <- light_importance(fls, v = x)
+plot(imp, fill = fillc, color = "black")
+```
+
+### Partial dependence curves
+
+Taking the average of many ICE curves produces the famous partial dependence plot. We consider such plots for four predictors.
+
+```{r}
+plot(light_profile(fls, v = "VALEUR_DES_BIENS"))
+plot(light_profile(fls, v = "NB_PIECES"))
+plot(light_profile(fls, v = "TYPE_RESIDENCE"))
+
+```
+
+## Classic diagnostic plots
+
+Classic predicted/residual/response versus covariable plots are worth a look.
+
+```{r}
+# Average predicted versus covariable
+plot(light_profile(fls, v = "NB_PIECES", type = "predicted"))
+# Average residual versus covariable
+plot(light_profile(fls, v = "NB_PIECES", type = "residual")) +
+  geom_hline(yintercept = 0)
+# Average response versus covariable
+plot(light_profile(fls, v = "NB_PIECES", type = "response"))
+```
+
+
+
+
+### Multiple aspects combined
+
+We often get a good picture of the effect of a covariable by combining partial dependence with classic plots.
+
+```{r}
+eff_DrivAge <- light_effects(fls, v = "NB_PIECES", counts_weighted = TRUE)
+p <- plot(eff_DrivAge, show_points = FALSE)
+plot_counts(p, eff_DrivAge, alpha = 0.3)
+```
+
+
+```{r}
+interact_rel <- light_interaction(
+  fls_log, 
+  v = most_important(imp, 4), 
+  take_sqrt = FALSE,
+  pairwise = TRUE, 
+  use_linkinv = TRUE,
+  seed = 61
+)
+plot(interact_rel, color = "black", fill = fillc, rotate_x = TRUE)
+```
+
+### On absolute scale
+
+```{r}
+interact_abs <- light_interaction(
+  fls_log, 
+  v = most_important(imp, 4), 
+  normalize = FALSE,
+  pairwise = TRUE, 
+  use_linkinv = TRUE,
+  seed = 61
+)
+plot(interact_abs, color = "black", fill = fillc, rotate_x = TRUE)
+```
+
+### Visualization
+
+Let's illustrate a strong and a weak interaction by conditional partial dependence plots.
+
+```{r}
+# Strong interaction
+# p <- plot(eff_DrivAge, show_points = FALSE)
+# plot_counts(p, eff_DrivAge, alpha = 0.3)
+
+
+pdp_NBPIECES_REGION <- light_profile(fls_log, v = "NB_PIECES", by = "REGION", 
+                                  pd_seed = 50, data = df_val, counts_weighted=TRUE)
+p <- plot(pdp_NBPIECES_REGION, show_points = FALSE)
+pdp_count <- light_effects(fls, v = "NB_PIECES")
+plot_counts(p, pdp_count, alpha = 0.3)
+
+pdp_VALEURDESBIENS_REGION <- light_profile(fls_log, v = "VALEUR_DES_BIENS", by = "REGION", 
+                                  pd_seed = 50, data = df_val, counts_weighted=TRUE)
+plot(pdp_VALEURDESBIENS_REGION)
+
+# Weak interaction
+pdp_TYPE_RESIDENCE_REGION <- light_profile(fls_log, v = "TYPE_RESIDENCE", 
+                                 by = "REGION", pd_seed = 50, data = df_val, counts_weighted=TRUE)
+plot(pdp_TYPE_RESIDENCE_REGION)
+```
+```{r}
+summary(df_val$NB/df_val$EXPO)
+summary(fl_glm$predict_function(fit_glm, df_val))
+summary(fl_xgb$predict_function(fit_xgb, df_val))
+```
+
+fls
+
+
+
+
+
+
+
+
 
 
