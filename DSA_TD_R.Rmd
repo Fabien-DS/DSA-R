@@ -13,7 +13,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
 ```
 
 # Présentation du projet
@@ -50,6 +50,124 @@ LoadPackage <- function (load.lib=c("")) {
 
 LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly'))
 ```
+## code
+
+
+```{r echo=FALSE}
+
+plot_obs<-function(dt,feature) {
+  
+      fig <- dt %>% plot_ly()
+      fig <- fig %>% add_trace(
+                     x= dt[[feature]], y= dt[['EXPO']], type = 'bar', name = 'Exposition',
+                     marker = list(color = '#C9EFF9'),
+                     hoverinfo = "text",
+                     text = ~paste(round(EXPO,0), ' années risque')
+                  )
+      fig<- fig %>% add_trace(
+                     x= dt[[feature]], y= dt[['Freq']], type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
+                     hoverinfo = "text",
+                     text = ~paste(round(Freq*100,2), '%')
+                    )
+      fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
+               xaxis = list(title = ""),
+               yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
+               yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
+      
+      
+      return(fig)
+}
+
+```
+
+
+
+```{r echo=FALSE}
+
+
+plot_obs_2<-function(df,feature,use_year=T) {
+
+    if (use_year) {
+          dt <-df %>%
+          group_by(df[[feature]], ANNEE, .drop=FALSE) %>%
+          summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO)) %>%
+          rename(feat = 'df[[feature]]') 
+    } else {
+          dt <-df %>%
+          group_by(df[[feature]], .drop=FALSE) %>%
+          summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO)) %>%
+          rename(feat = 'df[[feature]]') 
+    }
+    
+    
+    
+    fig <-plot_ly()
+    fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
+             xaxis = list(title = feature),
+             yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
+             yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
+    
+    if (use_year) {
+        for (year in unique(dt$ANNEE)) {
+        
+              dt_temp <- dt %>% filter(ANNEE==year)
+              fig <- fig %>% add_trace( 
+                             x= dt_temp$feat, y= dt_temp$EXPO, type = 'bar', name = paste0('Exposition_', year),
+                             hovertemplate = 'Expo: %{y:.0f}<br>'
+                          )
+              fig<- fig %>% add_trace(
+                             x= dt_temp$feat, y= dt_temp$Freq, type = 'scatter', mode = 'lines', yaxis = 'y2', name= paste0('Fréquence_', year),
+                             hovertemplate = 'Freq: %{y:.2%}<br>'
+                            )
+        
+        }
+    } else {
+              dt_temp <- dt 
+              fig <- fig %>% add_trace( 
+                             x= dt_temp$feat, y= dt_temp$EXPO, type = 'bar', name = 'Exposition',
+                             hovertemplate = 'Expo: %{y:.0f}<br>'
+                          )
+              fig<- fig %>% add_trace(
+                             x= dt_temp$feat, y= dt_temp$Freq, type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
+                             hovertemplate = 'Freq: %{y:.2%}<br>'
+                            )
+      
+    }
+    
+    return(fig) 
+}
+
+
+```
+
+```{r echo=FALSE}
+resume <- function(df, feature) {
+
+    dt <-df %>%
+      group_by(df[[feature]], .drop=FALSE) %>%
+      summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO ))
+    
+    colnames(dt)[1] <- feature
+    
+    
+    table<- formattable(dt,
+                align = c("l", rep("r", NCOL(dt) - 1)),
+                list(
+                    Freq = percent,
+                    nb_lignes= accounting,
+                    EXPO = accounting,
+                    pct_EXPO = percent
+                )
+    )
+  
+    fig1<- plot_obs_2(df, feature, use_year = F)
+    
+    fig2<- plot_obs_2(df, feature, use_year = T)
+    
+    return(list(dt=dt, table=table, fig=fig1, figyr=fig2))
+}
+```
+
 
 
 # Présentation du jeu de données
@@ -82,9 +200,14 @@ Pour des raisons d'anonymisation, les identifiants contrats ont été supprimés
 
 La signification des colonnes présentes est la suivante :
 
-* **`X`**: variable non nommée. Il s'agit d'un artefact du processus de création du fichier initial. **On ne la prend pas en compte**
+### **`X`**: 
 
-* **`EXPO`** : exposition en année risque du contrat. Sa valeur précalculée pour chaque ligne est comprise entre 0 et 1
+variable non nommée. Il s'agit d'un artefact du processus de création du fichier initial. **On ne la prend pas en compte**
+
+### **`EXPO`** : 
+
+exposition en année risque du contrat. Sa valeur précalculée pour chaque ligne est comprise entre 0 et 1
+
 ```{r echo=FALSE}
 formattable(summary(expo_train$EXPO))
 
@@ -96,7 +219,10 @@ expo_train %>%
 ```
 
 
-* **`FORMULE`** : variable catégorielle codant la formule du contrat comprenant 3 niveaux `MEDIUM`, `ESSENTIEL` et `CONFORT`
+### **`FORMULE`** : 
+
+variable catégorielle codant la formule du contrat comprenant 3 niveaux `MEDIUM`, `ESSENTIEL` et `CONFORT`
+
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
 
@@ -127,7 +253,9 @@ dt %>%
 ```
 
 
-* **`TYPE_RESIDENCE`** : variable catégorielle codant le fait que le bien est une résidence `PRINCIPALE`, ou `SECONDAIRE`
+### **`TYPE_RESIDENCE`** : 
+
+variable catégorielle codant le fait que le bien est une résidence `PRINCIPALE`, ou `SECONDAIRE`
 
 ```{r echo=FALSE}
 
@@ -158,7 +286,9 @@ dt %>%
   
 ```
 
-* **`TYPE_HABITATION`** : variable catégorielle codant le fait que le bien est un `APPARTEMENT`, ou une `MAISON`
+### **`TYPE_HABITATION`** : 
+
+variable catégorielle codant le fait que le bien est un `APPARTEMENT`, ou une `MAISON`
 
 ```{r echo=FALSE}
 
@@ -190,7 +320,9 @@ dt %>%
 ```
 
 
-* **`NB_PIECES`** : variable numérique indiquant le nombre de pièces du logement
+### **`NB_PIECES`** : 
+
+variable numérique indiquant le nombre de pièces du logement
 
 ```{r echo=FALSE}
 
@@ -222,7 +354,9 @@ dt %>%
 ```
 
 
-* **`SITUATION_JURIDIQUE`** : variable catégorielle indiquant si le souscripteur est prorpiétaire (`PROPRIO`) ou locataire (`LOCATAIRE`) du logement assuré 
+### **`SITUATION_JURIDIQUE`** : 
+
+variable catégorielle indiquant si le souscripteur est prorpiétaire (`PROPRIO`) ou locataire (`LOCATAIRE`) du logement assuré 
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -255,7 +389,9 @@ dt %>%
 
 
 
-* **`NIVEAU_JURIDIQUE`** :  variable catégorielle codant le niveau de couverture de la garantie juridique
+### **`NIVEAU_JURIDIQUE`** :  
+
+variable catégorielle codant le niveau de couverture de la garantie juridique
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -287,7 +423,9 @@ dt %>%
 ```
 
 
-* **`VALEUR_DES_BIENS`** : variable numérique reflétant la valeur couverte du contenu du logement
+### **`VALEUR_DES_BIENS`** : 
+
+variable numérique reflétant la valeur couverte du contenu du logement
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -318,7 +456,9 @@ dt %>%
   
 ```
 
-* **`OBJETS_DE_VALEUR`** : variable catégorielle codant le niveau de couverture des objets 
+### **`OBJETS_DE_VALEUR`** : 
+
+variable catégorielle codant le niveau de couverture des objets 
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -350,7 +490,9 @@ dt %>%
 ```
 
 
-* **`ZONIER`** : variable catégorielle codant la zone du bien assuré. Le code est constitué d'une lettre représentant une zone et d'un nombre représentant une partie de la zone
+### **`ZONIER`** : 
+
+variable catégorielle codant la zone du bien assuré. Le code est constitué d'une lettre représentant une zone et d'un nombre représentant une partie de la zone
 
 
 ```{r echo=FALSE}
@@ -385,7 +527,9 @@ dt %>%
 ```
 
 
-* **`NBSIN_TYPE1_AN1`** : variable numérique indiquant le nombre de sinistre de type 1 l'année précédente
+### **`NBSIN_TYPE1_AN1`** : 
+
+variable numérique indiquant le nombre de sinistre de type 1 l'année précédente
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -417,7 +561,9 @@ dt %>%
 ```
 
 
-* **`NBSIN_TYPE1_AN2`** : variable numérique indiquant le nombre de sinistre de type 1 il y a 2 ans
+### **`NBSIN_TYPE1_AN2`** : 
+
+variable numérique indiquant le nombre de sinistre de type 1 il y a 2 ans
 
 **ATTENTION** : comme la table ci-dessous le démontre, cette variable présente un problème puisque toutes les lignes ont au moins un sinistre
 
@@ -454,7 +600,9 @@ dt %>%
 ```
 
 
-* **`NBSIN_TYPE1_AN3`** : variable numérique indiquant le nombre de sinistre de type 1 il y a 3 ans
+### **`NBSIN_TYPE1_AN3`** : 
+
+variable numérique indiquant le nombre de sinistre de type 1 il y a 3 ans
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -486,7 +634,9 @@ dt %>%
 ```
 
 
-* **`NBSIN_TYPE2_AN1`** : variable numérique indiquant le nombre de sinistre de type 2 l'année précédente
+### **`NBSIN_TYPE2_AN1`** : 
+
+variable numérique indiquant le nombre de sinistre de type 2 l'année précédente
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -518,7 +668,9 @@ dt %>%
 ```
 
 
-* **`NBSIN_TYPE2_AN2`** : variable numérique indiquant le nombre de sinistre de type 2 il y a 2 ans
+### **`NBSIN_TYPE2_AN2`** : 
+
+variable numérique indiquant le nombre de sinistre de type 2 il y a 2 ans
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -550,7 +702,9 @@ dt %>%
 ```
 
 
-* **`NBSIN_TYPE2_AN3`** : variable numérique indiquant le nombre de sinistre de type 2 il y a 3 ans
+### **`NBSIN_TYPE2_AN3`** : 
+
+variable numérique indiquant le nombre de sinistre de type 2 il y a 3 ans
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -582,9 +736,14 @@ dt %>%
 ```
 
 
-* **`id`** : identifiant du risque, clef de jointure
+### **`id`** : 
 
-* **`ANNEE`** : variable catégorielle indiquant l'année d'observation du risque : `2016`, `2017`, `2018`
+identifiant du risque, clef de jointure
+
+### **`ANNEE`** : 
+
+variable catégorielle indiquant l'année d'observation du risque : `2016`, `2017`, `2018`
+
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
 
@@ -684,244 +843,313 @@ mrh_test<-mrh_test[ -valIndex,]
 
 ```
 
-Taux de sinistres moyen :
+### Taux de sinistres moyen :
 
 ```{r}
-sum(mrh_train$NB)/sum(mrh_train$EXPO)
+tx <- sum(mrh_train$NB*mrh_train$EXPO)/sum(mrh_train$EXPO)
+
+print(paste0('taux de sinistre moyen annuel : ', round(tx * 100,2), '%'))
 
 ```
 
-Taux de sinistre par variable :
+### Taux de sinistre par variable :
 
-```{r echo=FALSE}
+#### FORMULE
 
-df <- mrh_train
-feature <- 'FORMULE'
+```{r echo=FALSE, message=FALSE}
 
+df = mrh_train
+feature = 'FORMULE'
 
-dt <-df %>%
-  group_by(df[[feature]], ANNEE) %>%
-  summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO))
+res<-resume(df, feature)
 
-
-
-
-fig <- dt %>% plot_ly()
-fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
-         xaxis = list(title = ""),
-         yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
-         yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
-
-
-for (year in unique(dt$ANNEE)) {
-
-      fig <- fig %>% add_trace(
-                     x= dt[[feature]][dt$ANNEE == year], y= dt[['EXPO']][dt$ANNEE == year], type = 'bar', name = paste0('Exposition_', year),
-                     hovertemplate = 'Expo: %{y:.0f}<br>'
-                  )
-      fig<- fig %>% add_trace(
-                     x= dt[[feature]][dt$ANNEE == year], y= dt[['Freq']][dt$ANNEE == year], type = 'scatter', mode = 'lines', yaxis = 'y2', name= paste0('Fréquence_', year),
-                     hovertemplate = 'Freq: %{y:.2%}<br>'
-                    )
-
-}
-fig 
-  
-
-  
-```
-
-
-```{r echo=FALSE}
-
-
-plot_obs_2<-function(df,feature,use_year=T) {
-
-    if (use_year) {
-          dt <-df %>%
-          group_by(df[[feature]], ANNEE) %>%
-          summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO)) %>%
-          rename(feat = 'df[[feature]]')
-    } else {
-          dt <-df %>%
-          group_by(df[[feature]]) %>%
-          summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  sum(df$EXPO)) %>%
-          rename(feat = 'df[[feature]]')
-    }
-    
-    
-    
-    fig <-plot_ly()
-    fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
-             xaxis = list(title = feature),
-             yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
-             yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
-    
-    if (use_year) {
-        for (year in unique(dt$ANNEE)) {
-        
-              dt_temp <- dt %>% filter(ANNEE==year)
-              fig <- fig %>% add_trace( 
-                             x= dt_temp$feat, y= dt_temp$EXPO, type = 'bar', name = paste0('Exposition_', year),
-                             hovertemplate = 'Expo: %{y:.0f}<br>'
-                          )
-              fig<- fig %>% add_trace(
-                             x= dt_temp$feat, y= dt_temp$Freq, type = 'scatter', mode = 'lines', yaxis = 'y2', name= paste0('Fréquence_', year),
-                             hovertemplate = 'Freq: %{y:.2%}<br>'
-                            )
-        
-        }
-    } else {
-              dt_temp <- dt 
-              fig <- fig %>% add_trace( 
-                             x= dt_temp$feat, y= dt_temp$EXPO, type = 'bar', name = 'Exposition',
-                             hovertemplate = 'Expo: %{y:.0f}<br>'
-                          )
-              fig<- fig %>% add_trace(
-                             x= dt_temp$feat, y= dt_temp$Freq, type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
-                             hovertemplate = 'Freq: %{y:.2%}<br>'
-                            )
-      
-    }
-    
-    return(fig) 
-}
-
+res$table
+res$fig
+res$figyr
 
 ```
 
 
-```{r}
+
+**ENSEIGNEMENT** :   Le comportement observé est stable dans le temps. Les niveaux `CONFORT` et `ESSENTIEL` semblent avoir un niveau de risque de fréquence équivalent
+
+
+#### TYPE_RESIDENCE
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'TYPE_RESIDENCE'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+
+**ENSEIGNEMENT** :  Le comportement observé est stable dans le temps. Les résidences `SECONDAIRE` ont systématiquement une fréquence moindre
+
+
+#### TYPE_HABITATION
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'TYPE_HABITATION'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  Le comportement observé **N'est PAS** stable dans le temps. Le type d'habitation est à exclure.
+
+
+#### NB_PIECES
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'NB_PIECES'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  Le `NB_PIECES` présente des valeurs manquantes. La fréquence tend à augmenter avec le nombre de pièces.
+
+#### SITUATION_JURIDIQUE
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'SITUATION_JURIDIQUE'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  Les propriétaires semblent avoir un fréquence moindre que les locataires de manière consistante, mais avec de la variabilité.
+
+#### NIVEAU_JURIDIQUE
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'NIVEAU_JURIDIQUE'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  Le `NIVEAU_JURIDIQUE` **N'est PAS** stable dans le temps. A exclure.
+
+#### VALEUR_DES_BIENS
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'VALEUR_DES_BIENS'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  La fréquence augmente globalement avec la valeur des biens selon une relation non linéaire
+
+#### OBJETS_DE_VALEUR
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'OBJETS_DE_VALEUR'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  Le `NIVEAU_2` présente une fréquence significativement plus élevée.
+
+#### ZONIER
+
+```{r echo=FALSE, message=FALSE}
 
 df = mrh_train
 feature = 'ZONIER'
 
-plot_obs_2(df, feature, use_year = F)
-plot_obs_2(df, feature, use_year = T)
+res<-resume(df, feature)
 
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  Le `ZONIER` présente une fréquence avec beaucoup de variabilité, mais il semble y avoir une croissance par région qu'on peut tester :
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+
+
+test <- df %>% mutate(REGION = substr(ZONIER, 1,1))
+
+feature = 'REGION'
+
+
+res<-resume(test, feature)
+
+res$table
+res$fig
+res$figyr
 
 ```
 
 
+#### NBSIN_TYPE1_AN1
 
+```{r echo=FALSE, message=FALSE}
 
+df = mrh_train
+feature = 'NBSIN_TYPE1_AN1'
 
-```{r}
+res<-resume(df, feature)
 
-plot_obs<-function(dt,feature) {
-  
-      fig <- dt %>% plot_ly()
-      fig <- fig %>% add_trace(
-                     x= dt[[feature]], y= dt[['EXPO']], type = 'bar', name = 'Exposition',
-                     marker = list(color = '#C9EFF9'),
-                     hoverinfo = "text",
-                     text = ~paste(round(EXPO,0), ' années risque')
-                  )
-      fig<- fig %>% add_trace(
-                     x= dt[[feature]], y= dt[['Freq']], type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
-                     hoverinfo = "text",
-                     text = ~paste(round(Freq*100,2), '%')
-                    )
-      fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
-               xaxis = list(title = ""),
-               yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
-               yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
-      
-      
-      return(fig)
-}
-
+res$table
+res$fig
+res$figyr
 ```
 
 
+**ENSEIGNEMENT** :  La fréquence augmente globalement avec le nombre de sinistres de type 1 l'année précédente. Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
 
-```{r}
+#### NBSIN_TYPE1_AN3
 
-plot_obs<-function(dt,feature) {
-  
-      fig <- dt %>% plot_ly()
-      fig <- fig %>% add_trace(
-                     x= dt[[feature]], y= dt[['EXPO']], type = 'bar', name = 'Exposition',
-                     marker = list(color = '#C9EFF9'),
-                     hoverinfo = "text",
-                     text = ~paste(round(EXPO,0), ' années risque')
-                  )
-      fig<- fig %>% add_trace(
-                     x= dt[[feature]], y= dt[['Freq']], type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
-                     hoverinfo = "text",
-                     text = ~paste(round(Freq*100,2), '%')
-                    )
-      fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
-               xaxis = list(title = ""),
-               yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
-               yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
-      
-      
-      return(fig)
-}
+```{r echo=FALSE, message=FALSE}
 
+df = mrh_train
+feature = 'NBSIN_TYPE1_AN3'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
 ```
 
 
+**ENSEIGNEMENT** :  La fréquence augmente globalement avec le nombre de sinistres de type 1 il y a 3 ans. Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
 
 
+#### NBSIN_TYPE2_AN1
 
+```{r echo=FALSE, message=FALSE}
 
+df = mrh_train
+feature = 'NBSIN_TYPE2_AN1'
 
+res<-resume(df, feature)
 
-
-
-
-
-
-
-
-```{r}
-resume <- function(df, feature) {
-    expo_tot <- sum(df$EXPO)
-
-
-    dt <-df %>%
-      group_by(df[[feature]]) %>%
-      summarise(Freq = sum(NB*EXPO)/sum(EXPO), nb_lignes = n(), EXPO=sum(EXPO) ,  pct_EXPO = sum(EXPO) /  expo_tot )
-    
-    colnames(dt)[1] <- feature
-    
-    
-    table<- formattable(dt,
-                align=c('l','r', 'r','r', 'r'),
-                list(
-                    nb_lignes= accounting,
-                    EXPO = accounting,
-                    pct_EXPO = percent
-                )
-    )
-  
-    fig<- plot_obs(dt, feature)
-    
-    return(list(table=table, fig=fig))
-}
+res$table
+res$fig
+res$figyr
 ```
 
 
+**ENSEIGNEMENT** :  Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
 
-### FORMULE
 
-```{r echo=FALSE}
-res<-resume(mrh_train, 'FORMULE')
+#### NBSIN_TYPE2_AN2
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'NBSIN_TYPE2_AN2'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
+
+
+#### NBSIN_TYPE2_AN3
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'NBSIN_TYPE2_AN3'
+
+res<-resume(df, feature)
+
+res$table
+res$fig
+res$figyr
+```
+
+
+**ENSEIGNEMENT** :  Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
+
+
+#### ANNEE
+
+```{r echo=FALSE, message=FALSE}
+
+df = mrh_train
+feature = 'ANNEE'
+
+res<-resume(df, feature)
 
 res$table
 res$fig
 ```
 
 
+**ENSEIGNEMENT** :  L'année 2016 semble atypique. Le niveau actuel semble plus proche de ceux de 2017 et 2018.
 
-### VALEUR_DES_BIENS
+# Modélisation de la fréquence
 
-```{r echo=FALSE}
-res<-resume(mrh_train, 'VALEUR_DES_BIENS')
+Dans cette partie, on essaye de modéliser la fréquence des sinistres.
 
-res$table
-res$fig
+On commence par une modélisation de référence qui consistera en un modèle GLM Poisson classique en tirant partie des enseignements de la partie précédente.
+
+```{r}
+df_train <- mrh_train %>%
+            select(-c('TYPE_HABITATION', 'NIVEAU_JURIDIQUE' )) %>%
+            mutate(
+              N
+            )
+
 ```
+
 
