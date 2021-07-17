@@ -3,7 +3,7 @@
     "path": "/media/fabien/SSD2To/ML_Projects/DSA_TD_R/DSA_TD_R/DSA_TD_R.Rmd",
     "project_path": "DSA_TD_R.Rmd",
     "type": "r_markdown",
-    "hash": "1372520052",
+    "hash": "1018447806",
     "contents": "",
     "dirty": false,
     "created": 1624985056442.0,
@@ -11,18 +11,22 @@
     "relative_order": 1,
     "properties": {
         "source_window_id": "",
-        "Source": "Source",
-        "cursorPosition": "1385,39",
-        "scrollLine": "1382",
-        "last_setup_crc32": "AC2B5619363be854",
-        "docOutlineVisible": "1"
+        "Source": "Source9porz7p2hxsk",
+        "cursorPosition": "37,116",
+        "scrollLine": "17",
+        "last_setup_crc32": "F16CBE81363be854",
+        "docOutlineVisible": "1",
+        "docOutlineSize": "379",
+        "rmdVisualMode": "false",
+        "rmdVisualModeLocation": "1060:60",
+        "rmdVisualWrapConfigured": "true"
     },
     "folds": "",
-    "lastKnownWriteTime": 1626300824,
+    "lastKnownWriteTime": 1626541518,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1626300824780,
+    "last_content_update": 1626541518681,
     "read_only": false,
     "read_only_alternatives": []
 }

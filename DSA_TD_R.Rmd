@@ -20,8 +20,55 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
 
 Dans le cadre de la formation [DSA](https://www.institut-du-risk-management.fr/nos-formations/formations-certifiantes/certificat-data-science-pour-actuariat/), nous avons eu l'occasion d'analyser un jeu de données de tarification MRH à l'occasion d'un Hackathon.
 
-Du fait des ontraintes propres au Hackathon je n'avais pas eu l'occasion de finaliser l'analyse de ce jeu de données.
-Par ailleurs, pour le hackathon, le choix s'était porté sur le logiciel Python.
+Du fait des contraintes propres au Hackathon je n'avais pas eu l'occasion de finaliser l'analyse de ce jeu de données. Par ailleurs, pour le hackathon, le choix s'était porté sur le logiciel Python.
+
+Ce TD est donc l'occasion de poursuivre l'analyse de ce jeu de données. Toutefois, cet exercice est aussi l'occasion d'explorer les apports de deux articles :
+
+1. [Peeking into the black box](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) de Christian Lorentzen et Michael Mayer
+
+2. [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635) de Michel Denuit, Arthur Charpentier et Julien Trufin
+
+Ces articles s'appuient sur les travaux de M [Wütrich](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308) qui proposaient d'adapter la fonction de perte des modèles de machine learning au cas poissonien (déviance de poisson) pour pouvoir appliquer les techniques de ML à des problèmes d'estimation de la fréquence de sinistres.
+
+Cette approche diffère des consignes du Hackathon qui préconisaient de minimiser le RMSE. En effet, cette fonction d'erreur suppose une distribution normale, ce qui dans les cas de tarfication où la fréquence de sinistre est faible n'est pas réaliste.
+
+Dans le suite de ce rapport, on ne s'intéressera qu'à la modélisation de la fréquence.
+
+Soit $N_{i}$ le nombre de sinistre de la police ${i}$, alors dans le modèle Poisson homogène on suppose $N_{i} \sim \mathscr{P}(\lambda \nu_{i})$ où $\nu_{i}$ est l'exposition au risque de la police $i$, $\lambda$ est la fréquence de sinistre annuelle (homogène sur le portefeuille)et $\mathscr{P}$ la loi de Poisson.
+On pose $Y_{i} = \frac{N_{i}}{\nu_{i}}$ la fréquence annuelle des sinistres pour la police $i$ et $\mathbf{x_{i}} = (x_{1},x_{2}, \cdots, x_{q}) $ les $q$ caractéristiques de la police $i$.
+
+En tarification, on suppose dans les faits que $\lambda$ dépende de $\mathbf{x}$, de sorte que $\mathbb{P}[Y=k/\nu] = \mathbb{P}[N=k] = e^{-\lambda(\mathbf{x})\nu} \frac{(\lambda(\mathbf{x})\nu)^{k}}{k!}$ avec $ln(\lambda(\mathbf{x})) = \beta_{0} + \beta_{1}x_{1} + \beta_{2}x_{2} + \cdots + \beta_{q}x_{q} \overset{def}{=} \langle \mathbf{\beta}, \mathbf{x} \rangle$
+
+Lorsqu'on utilise les approches classiques de GLM, on estime $\hat{\lambda}$ en utilisant l'estimateur du maximum de vraisemblance $\hat{\beta}$ de $\beta$.
+
+Cet estimateur peut être obtenu soit en maximisant la log vraisemblance, soit en minimisant la déviance de Poisson.
+
+Une première adaptation des modèles classiques consiste donc à définir la déviance de poisson comme fonction de perte des algorithmes de ML.
+
+En complément, lorsqu'on utilise un GLM incluant un intercept et sa fonction de lien canonique, l'utilisatiuon d'un estimateur du maximum de vraisemblance apporte de bonnes propriétés pour son usage en tarification dont celle dite d'*équilibre* (Property 2.4 p33 de [Data Analytics for Non-Life Insurance Pricing](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308)), qui précise que :
+
+$\displaystyle\sum_{i=1}^{n} \nu_i\hat{\lambda}(\mathbf{x_{i}}) = \displaystyle\sum_{i=1}^{n} \nu_i exp\langle \mathbf{\hat{\beta}}, \mathbf{x_{i}} \rangle = \displaystyle\sum_{i=1}^{n} N_{i}$
+
+De sorte que le nombre total de sinistres estimés est égale au nombre total de sinistres observés. 
+
+Cette propriété semble même plus étendue dans les modèles GLM puisque cet équilibre se retrouve au global du portefeuille et pour toute modalité des variables catégorielles (dixit l'introduction de [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635))
+
+Il semble toutefois que ce ne soit pas le cas pour les modèles de ML, même lorque ceux-ci sont paramétrer pour minimiser la déviance de Poisson. [Wütrich](https://www.tandfonline.com/doi/pdf/10.1080/24754269.2021.1877960?needAccess=true) attribue cet effet aux méthodes d'arrêt précoce des algorithme d'optimisation utilisés.
+L'explication qualitative produite est que les modèles de ML, par leur plus grande souplesse, permettent un meilleurajustement aux réponses individuelles. Toutefois, ceux-ci n'incluent pas de contraintes d'équilibre au niveau du portefeuille, de sorte que ce meilleur ajustement local peut créer un biais (potentiellement important) au niveau global.
+
+Si cette propriété n'est pas respectée, il s'agit là d'un frein important à l'utilisation des modèles ML (non modifiés) en tarification, puisque l'assureur ne disposerait plus de garanties d'équilibre financier global entre son encaissement et les sinsitres qu'il s'est engagé à régler.
+
+C'est le sens de l'article [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635)) qui propose de se servir des primes estimées lors d'ue première étape par les modèles ML comme d'entrants pour une deuxième étape d'autocalibration locale. Cette méthode consiste à ajuster des modèles GLM locaux réduits à un intercept sur des ensembles de points qui sont définis à partir de la proximité des primes estimées par ML (l'étape de ML rassemble les observations qui se ressemblent, l'étape locale GLM lisse les écarts entre observations voisines pour retrouver les propriétés d'équilibre). 
+
+
+
+Soit $\mu_{i}(x_{i}) = \mathbb{E}[Y_{i}|\mathbf{X} = \mathbf{x_{i}}]$
+Dans la 
+
+
+
+
+
 
 Ce TD est donc l'occasion de poursuivre l'analyse de ce jeu de données et d'explorer l'usage de packages et d'approches développés par MV Wütrich et disponible sur le site de l'[association suisse des actuaires](https://www.actuarialdatascience.org/ADS-Lectures/Courses/).
 
@@ -48,10 +95,10 @@ LoadPackage <- function (load.lib=c("")) {
 }
 
 
-LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly', 'xgboost', 'flashlight', 'MetricsWeighted'))
+LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly', 'xgboost', 'flashlight', 'MetricsWeighted', 'corrplot', 'lsr', 'h2o'))
 ```
-## code
 
+## code
 
 ```{r echo=FALSE}
 
@@ -79,8 +126,6 @@ plot_obs<-function(dt,feature) {
 }
 
 ```
-
-
 
 ```{r echo=FALSE}
 
@@ -168,8 +213,6 @@ resume <- function(df, feature) {
 }
 ```
 
-
-
 # Présentation du jeu de données
 
 Le jeu de données est constitué de 4 fichiers :
@@ -178,9 +221,7 @@ Le jeu de données est constitué de 4 fichiers :
 list.files(path=here('data', 'raw'))
 ```
 
-Le projet suit un portefeuille d'assurance MRH suivi sur plusieurs années de 2016 à 2018 inclus. 
-L'objectif initial du Hackathon est d'estimer les primes 2019 sur un échantillon de contrats.
-
+Le projet suit un portefeuille d'assurance MRH suivi sur plusieurs années de 2016 à 2018 inclus. L'objectif initial du Hackathon est d'estimer les primes 2019 sur un échantillon de contrats.
 
 ## expo_train
 
@@ -200,11 +241,11 @@ Pour des raisons d'anonymisation, les identifiants contrats ont été supprimés
 
 La signification des colonnes présentes est la suivante :
 
-### **`X`**: 
+### **`X`**:
 
 variable non nommée. Il s'agit d'un artefact du processus de création du fichier initial. **On ne la prend pas en compte**
 
-### **`EXPO`** : 
+### **`EXPO`** :
 
 exposition en année risque du contrat. Sa valeur précalculée pour chaque ligne est comprise entre 0 et 1
 
@@ -218,8 +259,7 @@ expo_train %>%
   
 ```
 
-
-### **`FORMULE`** : 
+### **`FORMULE`** :
 
 variable catégorielle codant la formule du contrat comprenant 3 niveaux `MEDIUM`, `ESSENTIEL` et `CONFORT`
 
@@ -252,8 +292,7 @@ dt %>%
   
 ```
 
-
-### **`TYPE_RESIDENCE`** : 
+### **`TYPE_RESIDENCE`** :
 
 variable catégorielle codant le fait que le bien est une résidence `PRINCIPALE`, ou `SECONDAIRE`
 
@@ -286,7 +325,7 @@ dt %>%
   
 ```
 
-### **`TYPE_HABITATION`** : 
+### **`TYPE_HABITATION`** :
 
 variable catégorielle codant le fait que le bien est un `APPARTEMENT`, ou une `MAISON`
 
@@ -319,8 +358,7 @@ dt %>%
   
 ```
 
-
-### **`NB_PIECES`** : 
+### **`NB_PIECES`** :
 
 variable numérique indiquant le nombre de pièces du logement
 
@@ -353,10 +391,9 @@ dt %>%
   
 ```
 
+### **`SITUATION_JURIDIQUE`** :
 
-### **`SITUATION_JURIDIQUE`** : 
-
-variable catégorielle indiquant si le souscripteur est prorpiétaire (`PROPRIO`) ou locataire (`LOCATAIRE`) du logement assuré 
+variable catégorielle indiquant si le souscripteur est prorpiétaire (`PROPRIO`) ou locataire (`LOCATAIRE`) du logement assuré
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -387,9 +424,7 @@ dt %>%
   
 ```
 
-
-
-### **`NIVEAU_JURIDIQUE`** :  
+### **`NIVEAU_JURIDIQUE`** :
 
 variable catégorielle codant le niveau de couverture de la garantie juridique
 
@@ -422,8 +457,7 @@ dt %>%
   
 ```
 
-
-### **`VALEUR_DES_BIENS`** : 
+### **`VALEUR_DES_BIENS`** :
 
 variable numérique reflétant la valeur couverte du contenu du logement
 
@@ -456,9 +490,9 @@ dt %>%
   
 ```
 
-### **`OBJETS_DE_VALEUR`** : 
+### **`OBJETS_DE_VALEUR`** :
 
-variable catégorielle codant le niveau de couverture des objets 
+variable catégorielle codant le niveau de couverture des objets
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -489,11 +523,9 @@ dt %>%
   
 ```
 
-
-### **`ZONIER`** : 
+### **`ZONIER`** :
 
 variable catégorielle codant la zone du bien assuré. Le code est constitué d'une lettre représentant une zone et d'un nombre représentant une partie de la zone
-
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -526,8 +558,7 @@ dt %>%
   
 ```
 
-
-### **`NBSIN_TYPE1_AN1`** : 
+### **`NBSIN_TYPE1_AN1`** :
 
 variable numérique indiquant le nombre de sinistre de type 1 l'année précédente
 
@@ -560,15 +591,13 @@ dt %>%
   
 ```
 
-
-### **`NBSIN_TYPE1_AN2`** : 
+### **`NBSIN_TYPE1_AN2`** :
 
 variable numérique indiquant le nombre de sinistre de type 1 il y a 2 ans
 
 **ATTENTION** : comme la table ci-dessous le démontre, cette variable présente un problème puisque toutes les lignes ont au moins un sinistre
 
 Comme discuté dans le hackathon **on ignore cette variable**
-
 
 ```{r echo=FALSE}
 expo_tot <- sum(expo_train$EXPO)
@@ -599,8 +628,7 @@ dt %>%
   
 ```
 
-
-### **`NBSIN_TYPE1_AN3`** : 
+### **`NBSIN_TYPE1_AN3`** :
 
 variable numérique indiquant le nombre de sinistre de type 1 il y a 3 ans
 
@@ -633,8 +661,7 @@ dt %>%
   
 ```
 
-
-### **`NBSIN_TYPE2_AN1`** : 
+### **`NBSIN_TYPE2_AN1`** :
 
 variable numérique indiquant le nombre de sinistre de type 2 l'année précédente
 
@@ -667,8 +694,7 @@ dt %>%
   
 ```
 
-
-### **`NBSIN_TYPE2_AN2`** : 
+### **`NBSIN_TYPE2_AN2`** :
 
 variable numérique indiquant le nombre de sinistre de type 2 il y a 2 ans
 
@@ -701,8 +727,7 @@ dt %>%
   
 ```
 
-
-### **`NBSIN_TYPE2_AN3`** : 
+### **`NBSIN_TYPE2_AN3`** :
 
 variable numérique indiquant le nombre de sinistre de type 2 il y a 3 ans
 
@@ -735,12 +760,11 @@ dt %>%
   
 ```
 
-
-### **`id`** : 
+### **`id`** :
 
 identifiant du risque, clef de jointure
 
-### **`ANNEE`** : 
+### **`ANNEE`** :
 
 variable catégorielle indiquant l'année d'observation du risque : `2016`, `2017`, `2018`
 
@@ -773,7 +797,6 @@ dt %>%
   
 ```
 
-
 ## sin_train
 
 Le fichier `expo_train.csv` contient la liste des contrats en risques historiquement suivis :
@@ -786,10 +809,9 @@ datatable(head(sin_train))
 str(sin_train)
 ```
 
+-   **`id`** : identifiant du risque, clef de jointure avec le fichier `expo_train`
 
-* **`id`** : identifiant du risque, clef de jointure avec le fichier `expo_train`
-
-* **`NB`** : Nombre de sinistres de la typologie modélisée (inconnue) sur la période d'observation
+-   **`NB`** : Nombre de sinistres de la typologie modélisée (inconnue) sur la période d'observation
 
 ```{r echo=FALSE}
 
@@ -815,7 +837,6 @@ dt %>%
     labs(fill = 'NB')
   
 ```
-
 
 ## fichier combiné
 
@@ -846,7 +867,7 @@ mrh_test<-mrh_test[ -valIndex,]
 ### Taux de sinistres moyen :
 
 ```{r}
-tx <- sum(mrh_train$NB*mrh_train$EXPO)/sum(mrh_train$EXPO)
+tx <- sum(mrh_train$NB)/sum(mrh_train$EXPO)
 
 print(paste0('taux de sinistre moyen annuel : ', round(tx * 100,2), '%'))
 
@@ -869,10 +890,7 @@ res$figyr
 
 ```
 
-
-
-**ENSEIGNEMENT** :   Le comportement observé est stable dans le temps. Les niveaux `CONFORT` et `ESSENTIEL` semblent avoir un niveau de risque de fréquence équivalent
-
+**ENSEIGNEMENT** : Le comportement observé est stable dans le temps. Les niveaux `CONFORT` et `ESSENTIEL` semblent avoir un niveau de risque de fréquence équivalent
 
 #### TYPE_RESIDENCE
 
@@ -888,10 +906,7 @@ res$fig
 res$figyr
 ```
 
-
-
-**ENSEIGNEMENT** :  Le comportement observé est stable dans le temps. Les résidences `SECONDAIRE` ont systématiquement une fréquence moindre
-
+**ENSEIGNEMENT** : Le comportement observé est stable dans le temps. Les résidences `SECONDAIRE` ont systématiquement une fréquence moindre
 
 #### TYPE_HABITATION
 
@@ -907,9 +922,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Le comportement observé **N'est PAS** stable dans le temps. Le type d'habitation est à exclure.
-
+**ENSEIGNEMENT** : Le comportement observé **N'est PAS** stable dans le temps. Le type d'habitation est à exclure.
 
 #### NB_PIECES
 
@@ -925,8 +938,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Le `NB_PIECES` présente des valeurs manquantes. La fréquence tend à augmenter avec le nombre de pièces.
+**ENSEIGNEMENT** : Le `NB_PIECES` présente des valeurs manquantes. La fréquence tend à augmenter avec le nombre de pièces.
 
 #### SITUATION_JURIDIQUE
 
@@ -942,8 +954,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Les propriétaires semblent avoir un fréquence moindre que les locataires de manière consistante, mais avec de la variabilité.
+**ENSEIGNEMENT** : Les propriétaires semblent avoir un fréquence moindre que les locataires de manière consistante, mais avec de la variabilité.
 
 #### NIVEAU_JURIDIQUE
 
@@ -959,8 +970,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Le `NIVEAU_JURIDIQUE` **N'est PAS** stable dans le temps. A exclure.
+**ENSEIGNEMENT** : Le `NIVEAU_JURIDIQUE` **N'est PAS** stable dans le temps. A exclure.
 
 #### VALEUR_DES_BIENS
 
@@ -976,8 +986,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  La fréquence augmente globalement avec la valeur des biens selon une relation non linéaire
+**ENSEIGNEMENT** : La fréquence augmente globalement avec la valeur des biens selon une relation non linéaire
 
 #### OBJETS_DE_VALEUR
 
@@ -993,8 +1002,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Le `NIVEAU_2` présente une fréquence significativement plus élevée.
+**ENSEIGNEMENT** : Le `NIVEAU_2` présente une fréquence significativement plus élevée.
 
 #### ZONIER
 
@@ -1010,8 +1018,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Le `ZONIER` présente une fréquence avec beaucoup de variabilité, mais il semble y avoir une croissance par région qu'on peut tester :
+**ENSEIGNEMENT** : Le `ZONIER` présente une fréquence avec beaucoup de variabilité, mais il semble y avoir une croissance par région qu'on peut tester :
 
 ```{r echo=FALSE, message=FALSE}
 
@@ -1031,7 +1038,6 @@ res$figyr
 
 ```
 
-
 #### NBSIN_TYPE1_AN1
 
 ```{r echo=FALSE, message=FALSE}
@@ -1046,8 +1052,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  La fréquence augmente globalement avec le nombre de sinistres de type 1 l'année précédente. Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
+**ENSEIGNEMENT** : La fréquence augmente globalement avec le nombre de sinistres de type 1 l'année précédente. Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
 
 #### NBSIN_TYPE1_AN3
 
@@ -1063,9 +1068,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  La fréquence augmente globalement avec le nombre de sinistres de type 1 il y a 3 ans. Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
-
+**ENSEIGNEMENT** : La fréquence augmente globalement avec le nombre de sinistres de type 1 il y a 3 ans. Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
 
 #### NBSIN_TYPE2_AN1
 
@@ -1081,9 +1084,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
-
+**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
 
 #### NBSIN_TYPE2_AN2
 
@@ -1099,9 +1100,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
-
+**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
 
 #### NBSIN_TYPE2_AN3
 
@@ -1117,9 +1116,7 @@ res$fig
 res$figyr
 ```
 
-
-**ENSEIGNEMENT** :  Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
-
+**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
 
 #### ANNEE
 
@@ -1134,15 +1131,9 @@ res$table
 res$fig
 ```
 
+**ENSEIGNEMENT** : L'année 2016 semble atypique. Le niveau actuel semble plus proche de ceux de 2017 et 2018.
 
-**ENSEIGNEMENT** :  L'année 2016 semble atypique. Le niveau actuel semble plus proche de ceux de 2017 et 2018.
-
-# Modélisation de la fréquence
-
-Dans cette partie, on essaye de modéliser la fréquence des sinistres.
-
-On commence par une modélisation de référence qui consistera en un modèle GLM Poisson classique en tirant partie des enseignements de la partie précédente.
-
+### Nettoyage des données
 
 ```{r}
 preprocess<- function(dt) {
@@ -1164,7 +1155,63 @@ df_val <- preprocess(mrh_val)
 df_test <- preprocess(mrh_test)
 ```
 
+### Calcul du V de Cramer
 
+On mesude l'association des variables entre elles
+
+```{r}
+X_train <- df_train %>% select(-c('id', 'EXPO', 'NB', 'COUT'))
+
+
+# Initialize empty matrix to store coefficients
+empty_m <- matrix(ncol = length(X_train),
+            nrow = length(X_train),
+            dimnames = list(names(X_train), 
+                            names(X_train)))
+# Function that accepts matrix for coefficients and data and returns a correlation matrix
+calculate_cramer <- function(m, df) {
+ for (r in seq(nrow(m))){
+   for (c in seq(ncol(m))){
+     m[[r, c]] <- lsr::cramersV(X_train[[r]], X_train[[c]])
+   }
+ }
+    return(m)
+}
+
+cor_matrix <- calculate_cramer(empty_m ,X_train)
+
+corrplot(cor_matrix)
+
+```
+
+# Modélisation de la fréquence
+
+Dans cette partie, on essaye de modéliser la fréquence des sinistres.
+
+On commence par une modélisation de référence qui consistera en un modèle GLM Poisson classique en tirant partie des enseignements de la partie précédente.
+
+```{r}
+
+h2o.init(nthreads = -1)
+
+
+```
+
+```{r}
+reg_bst_100 = h2o.gbm(y = 'NB', x = names(df_train),
+                       distribution = "poisson",
+                       offset_column = "EXPO",
+                       training_frame = as.h2o(df_train),
+                       validation_frame = as.h2o(df_val),
+                       ntrees = 100,
+                       nfolds = 5,
+                       seed = 1)
+
+```
+
+```{r}
+plot(reg_bst_100)
+```
 
 ```{r}
 reg0 = glm(NB~1+offset(log(EXPO)),family=poisson,data=df_train)
@@ -1173,8 +1220,6 @@ summary(reg0)
 
 plot(reg0)
 ```
-
-
 
 ```{r}
 
@@ -1212,8 +1257,6 @@ params_freq <- list(
   lambda = 0.5,
   max_delta_step = 2,
   min_split_loss = 0,
-  #  monotone_constraints = c(0,-1,0,0,0,0,0), 
-  #  interaction_constraints = list(4, c(0, 1, 2, 3, 5, 6)),
   colsample_bytree = 1,
   subsample = 0.9
 )
@@ -1234,16 +1277,16 @@ fit_xgb <- xgb.load("xgb.model")
 
 ```
 
-
 # Model Explanations
 
 The models are ready, so let's shed light into them.
 
 ## Setting up explainers
 
-We start by setting up the explainers. These are basically objects that know how to create predictions. 
+We start by setting up the explainers. These are basically objects that know how to create predictions.
 
 **Crucial: the prediction function needs to work for subsets of datasets, not just for the original model data set.**
+
 ```{r}
 fl_glm <- flashlight(
   model = fit_glm, label = "GLM", 
@@ -1255,6 +1298,15 @@ fl_xgb <- flashlight(
   predict_function = function(fit, X) predict(fit, prep_xgb(X, x))
 )
 
+fl_xgb <- flashlight(
+  model = fit_xgb, label = "H20 GBM", 
+  predict_function = function(fit, X) predict(fit, prep_xgb(X, x))
+)
+
+reg_bst_100
+
+
+
 # Combine them and add common elements like reference data
 metrics <- list(`Average deviance` = deviance_poisson, 
                 `Relative deviance reduction` = r_squared_poisson)
@@ -1263,11 +1315,6 @@ fls <- multiflashlight(list(fl_glm, fl_xgb), data = df_val,
 # Version on canonical scale
 fls_log <- multiflashlight(fls, linkinv = log)
 ```
-
-
-
-
-
 
 ## Performance
 
@@ -1315,9 +1362,6 @@ plot(light_profile(fls, v = "NB_PIECES", type = "residual")) +
 plot(light_profile(fls, v = "NB_PIECES", type = "response"))
 ```
 
-
-
-
 ### Multiple aspects combined
 
 We often get a good picture of the effect of a covariable by combining partial dependence with classic plots.
@@ -1327,7 +1371,6 @@ eff_DrivAge <- light_effects(fls, v = "NB_PIECES", counts_weighted = TRUE)
 p <- plot(eff_DrivAge, show_points = FALSE)
 plot_counts(p, eff_DrivAge, alpha = 0.3)
 ```
-
 
 ```{r}
 interact_rel <- light_interaction(
@@ -1380,6 +1423,7 @@ pdp_TYPE_RESIDENCE_REGION <- light_profile(fls_log, v = "TYPE_RESIDENCE",
                                  by = "REGION", pd_seed = 50, data = df_val, counts_weighted=TRUE)
 plot(pdp_TYPE_RESIDENCE_REGION)
 ```
+
 ```{r}
 summary(df_val$NB/df_val$EXPO)
 summary(fl_glm$predict_function(fit_glm, df_val))
@@ -1387,13 +1431,3 @@ summary(fl_xgb$predict_function(fit_xgb, df_val))
 ```
 
 fls
-
-
-
-
-
-
-
-
-
-
