@@ -18,29 +18,24 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
 
 # Présentation du projet
 
-Ce projet s'inscrit dans le cadre de la formation [DSA](https://www.institut-du-risk-management.fr/nos-formations/formations-certifiantes/certificat-data-science-pour-actuariat/), et évalue l'apprentissage de R réalisé auprès de Robin RYDER.
+Ce projet s'inscrit dans le cadre de la formation [DSA](https://www.institut-du-risk-management.fr/nos-formations/formations-certifiantes/certificat-data-science-pour-actuariat/), et évalue l'apprentissage de R réalisé auprès de **Robin RYDER**.
 
 Le thème de ce projet est libre.
 
----
-> J'ai choisi d'étudier une série d'articles qui m'ont frappé sur la comparaison des approches classiques par modèles linéaires généralisés `GLM`) et par machine learning (ci après `ML`) dans le cadre de la tarification en assurance non-vie et la manière dont elles pouvaient se compléter.
 
----
+> J'ai choisi d'étudier une série d'articles qui m'ont frappé sur la comparaison des approches classiques par modèles linéaires généralisés (`GLM`) et par machine learning (ci après `ML`) dans le cadre de la tarification en assurance non-vie et la manière dont elles pouvaient se compléter.
 
-Dans le suite de ce rapport, on ne s'intéressera qu'à la modélisation de la fréquence.
+
+## Les bonnes propriétés du GLM dans le cadre d'une modélisation de la fréquence de sinistres
 
 Soit $N_{i}$ le nombre de sinistre de la police ${i}$, alors dans le modèle Poisson homogène on suppose $N_{i} \sim \mathscr{P}(\lambda \nu_{i})$ où $\nu_{i}$ est l'exposition au risque de la police $i$, $\lambda$ est la fréquence de sinistre annuelle (homogène sur le portefeuille)et $\mathscr{P}$ la loi de Poisson.
-On pose $Y_{i} = \frac{N_{i}}{\nu_{i}}$ la fréquence annuelle des sinistres pour la police $i$ et $\mathbf{x_{i}} = (x_{1},x_{2}, \cdots, x_{q}) $ les $q$ caractéristiques de la police $i$.
+On pose $Y_{i} = \frac{N_{i}}{\nu_{i}}$ la fréquence annuelle des sinistres pour la police $i$ et $ \mathbf{x_{i}} = (x_{1},x_{2},\cdots, x_{q}) $ les $q$ caractéristiques de la police $i$.
 
-En tarification, on suppose dans les faits que $\lambda$ dépende de $\mathbf{x}$, de sorte que $\mathbb{P}[Y=k/\nu] = \mathbb{P}[N=k] = e^{-\lambda(\mathbf{x})\nu} \frac{(\lambda(\mathbf{x})\nu)^{k}}{k!}$ avec $ln(\lambda(\mathbf{x})) = \beta_{0} + \beta_{1}x_{1} + \beta_{2}x_{2} + \cdots + \beta_{q}x_{q} \overset{def}{=} \langle \mathbf{\beta}, \mathbf{x} \rangle$ en complétant $\mathbf{x}$ par $x_{0} = 1$.
+En tarification, on suppose dans les faits que $\lambda$ dépend de $\mathbf{x}$, de sorte que $\mathbb{P}[Y=k/\nu] = \mathbb{P}[N=k] = e^{-\lambda(\mathbf{x})\nu} \frac{(\lambda(\mathbf{x})\nu)^{k}}{k!}$ avec $ln(\lambda(\mathbf{x})) = \beta_{0} + \beta_{1}x_{1} + \beta_{2}x_{2} + \cdots + \beta_{q}x_{q} \overset{def}{=} \langle \mathbf{\beta}, \mathbf{x} \rangle$ en complétant $\mathbf{x}$ par $x_{0} = 1$.
 
 Lorsqu'on utilise les approches classiques de GLM, on estime $\hat{\lambda}$ en utilisant l'estimateur du maximum de vraisemblance $\hat{\beta}$ de $\beta$.
 
 Cet estimateur peut être obtenu soit en maximisant la log vraisemblance, soit de manière équivalente en minimisant la déviance de Poisson.
-
-Une première adaptation des modèles classiques consiste donc à **définir la déviance de poisson comme fonction de perte des algorithmes de ML**.
-
-C'est notamment l'approche préconisée par dans [Data Analytics for Non-Life Insurance Pricing](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308) de Mario V. Wuthrich et Christoph Buser
 
 En complément, lorsqu'on utilise un GLM incluant un intercept et sa fonction de lien canonique, l'utilisatiuon d'un estimateur du maximum de vraisemblance apporte de bonnes propriétés pour son usage en tarification dont celle dite de **propriété d'équilibre** (Property 2.4 p33 de [Data Analytics for Non-Life Insurance Pricing](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308)), qui précise que :
 
@@ -51,99 +46,58 @@ De sorte que le nombre total de sinistres estimés est égale au nombre total de
 Cette propriété est même plus étendue dans certains modèles GLM, notamment lorsque le modèle poissonien avec lien log (exemple (b) p423 de [A systematic relationship between minimum bias and gener- alized linear models](https://www.casact.org/sites/default/files/2021-02/pubs_proceed_proceed99_99317.pdf)) :  dans ce cas l'équilibre existe au globaldu portefeuille, mais aussi pour chaque classe des variables catégorielles incluses dans le modèle.
 
 **Ces propriétés d'équilibres sont critiques pour un assureur** dans un exercice de tarification, puisqu'elles assurent qu'une structure tarifaire basée sur cette approche lui permettra d'équilibrer (au moins théoriquement) ses encaissement avec les sinistres qu'il s'est engagé à indemniser.
-En outre, ces approches sont très intuitives et ont en partie contribué au succès des GLM en assurance.
 
-```
-Or il semble que l'utilisation directe de modèles de ML, mêmes adaptés pour minimiser la déviance, ne présentent pas ces garanties.
-```
+Le GLM est donc interprétable, souple à l'usage et présente des propriétés d'équilibre global et local.
+Néanmoins son ajustement nécessite un temps humain important et le praticien doit s'en remettre à son expérience pour estimer les éventuelles interactions à inclure dans son analyse. 
 
-En effet, si les modèles de ML permettent une meilleurs corrélation avec la réponse individuelle de chaque police, aucune garantie n'est expressément introduite au global du portefeuille ce qui peut produire des divergences, potentiellement importantes, entre la somme des primes demandées et les sinistres que l'assureur s'est engagé à régler.
+## L'apport et les limites des modèles ML en tarification
+
+Les modèles ML par leur grande flexibilité sont des candidats naturels pour remplacer ou à minima compléter les modèles GLM du fait de leur performance sur une grande variété de cas d'usages ces dernières années.
+Toutefois, ces modèles nécessitent qulques ajustements avant de pouvoir être utilisés dans des problèmes de tarification.
+
+### Ajustement #1 : définition de la fonction de perte
+
+Une première adaptation des modèles classiques consiste donc à **définir la déviance de poisson comme fonction de perte des algorithmes de ML**.
+
+C'est notamment l'approche préconisée par dans [Data Analytics for Non-Life Insurance Pricing](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308) de Mario V. Wuthrich et Christoph Buser.
+
+Cette approche a notamment conduit à l'article [Boosting insights in insurance tariff plans with tree-based machine learning methods](https://arxiv.org/abs/1904.10890) et la créatuon du package [distRforest](https://github.com/henckr/distRforest).
+NB : le package `rpart` inclut la déviance de poisson, mais ne permet de définir simplement une fonction de déviance appropriée pour la sévérité (lognormale ou gamma)
+
+### Limites de la modification de la fonction de perte
+
+La définition d'une fonction de perte appropriée est devenue l'approche par défaut de l'utilisation des méthodes ML en tarification. Néanmoins, dès 2019 Wütrich remarqua que les sinistres estimés par les modèles ML ne correspondaient pas à la sinistralité observée sur le portefeuille, même sur le jeu d'entraînement
+
+> Il semble que l'utilisation directe de modèles de ML, mêmes adaptés pour minimiser la déviance, ne présentent pas les garanties d'équilibre des GLM.
+
+Les modèles de ML permettent une meilleurs corrélation avec la réponse individuelle de chaque police, du fait de la plus grande flexibilité accordée à la forme de la contribution (éventuellement non linéaire) de chaque variable à la sortie. Toutefois, cette meilleure corrélation s'obtient au prix de l'abandon de la notion d'équilibre.
+En effet, aucune garantie n'est expressément introduite au global du portefeuille ce qui peut produire des divergences, potentiellement importantes, entre la somme des primes demandées et les sinistres que l'assureur s'est engagé à régler.
 
 Cet effet est attribué par M Wütrich aux conditions d'arrêt précoce des algorithmes d'optimisation utilisés par les modèles ML.
 
-L'article [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635) de Michel Denuit, Arthur Charpentier et Julien Trufin repart de ce constat et 
+## Pistes de réconciliation des approches GLM et ML pour la tarification
 
+Deux options s'offrent dès lors à l'actuaire :
 
+1. essayer d'extraire des informations de la manière dont les modèles ML ont appris les efefts des variables sur la sortie pour compléter les GLM classiquement manipulés avec l'objectiof de combler en partie l'écart de performance (s'il est important) avec le modèle ML tout en conservant les propriiétés et l'interprétabilité naturelle des modèles GLM. C'est la voie suivie par l'article [Peeking into the black box](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) de Christian Lorentzen et Michael Mayer
 
+2. corriger les approches ML en les combinant avec une approche GLM pour en récupérér les propriétés. Le gain de cette approche devrait être plus important que pour la méthode précédente tout en présentant les propriétés d'équilibre des modèles ML sans toutefois apporter l'interprétabilité de ces modèles. C'est la proposition de  de Michel Denuit, Arthur Charpentier et Julien Trufin dans [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635) repartent du constat de Wütrich et proposent une solution de contournement sous la forme d'un ajustement en deux temps successifs :
 
+    1. Dans un premier temps, un modèle ML est ajusté pour déterminer une première estimation $\hat{\pi}$ des primes théoriques
 
+    2. Dans un deuxième temps, ces primes théoriques $\hat{\pi}$ sont utilisées comme variable entrante d'un modèle d'autocalibration local pour produire des primes corrigées $\widehat{\pi_{BC}}$. 
+    Cette méthode consiste à ajuster des modèles GLM locaux réduits à un intercept sur des ensembles de points "proches". La notion de proximité ici se fait qui sont définis à partir de la proximité des primes théoriques estimées par ML $\hat{\pi}$ (l'étape de ML rassemble les observations qui se ressemblent, l'étape locale GLM lisse les écarts entre observations voisines pour retrouver les propriétés d'équilibre).  
 
+## Objectif du projet
 
-1. [Data Analytics for Non-Life Insurance Pricing](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308) de Mario V. Wuthrich et Christoph Buser
-   Cet article détaille les mathématiques derrières l'utilisation des modèles GLM et des principaux modèles ML, y compris les réseaux de neurones de type feed forward
+Dans ce rapport nous prendrons comme prétexte l'analyse du jeu de données tarifaire d'un portefeuille MRH qui nous avait été confié lors du Hackathon pour explorer ces deux approches.
+Ce faisant nous nous écarterons du cadre du Hackathon qui proposait de minimiser le RMSE. 
+Par ailleurs, ne disposant pas du jeu de test, nous ne pourrons comparer ces méthodes avec le leaderbord produit à l'occasion de l'événement.
 
-2. [Peeking into the black box](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) de Christian Lorentzen et Michael Mayer
-   Cet article met en avant une utilisation des techniques d'explicabilité des modèles ML pour comprendre la manière dont ces modèles combinent les informations en entrée pour arriver à leurs prédictions. Ce faisant le praticien est invité à :
-    - identifier le gain marginal du modèle ML par rapport au modèle GLM généralement en place et en cas d'écart significatif à
-    - identifier les éléments appris par le modèles ML (effets non linéaires adns les variables simples, principales intéractions...) qui peuvent être réintégrés dans le modè-le GLM afin d'en réduire l'écart en termes de performance
+De ce fait, et sans perte de généralité, vis-à-vis du propos des articles, nous nous restreindrons dans la suite de ce document à l'analyse de la seule fréquence des sinistres.
 
-3. [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635) de Michel Denuit, Arthur Charpentier et Julien Trufin
-   Cet article est le plus intriguant des 3
+Dans la section suivante nous présenterons le jeu de données avant d'en entreprendre la modélisation. La dernière section traitera des approches mises en places dans les articles.
 
-
-
-
-
-
-
-
-
-
-
-
-nous avons eu l'occasion d'analyser un jeu de données de tarification MRH à l'occasion d'un Hackathon.
-
-Du fait des contraintes propres au Hackathon je n'avais pas eu l'occasion de finaliser l'analyse de ce jeu de données. Par ailleurs, pour le hackathon, le choix s'était porté sur le logiciel Python.
-
-Ce TD est donc l'occasion de poursuivre l'analyse de ce jeu de données. Toutefois, cet exercice est aussi l'occasion d'explorer les apports de deux articles :
-
-1. [Peeking into the black box](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) de Christian Lorentzen et Michael Mayer
-
-2. [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635) de Michel Denuit, Arthur Charpentier et Julien Trufin
-
-Ces articles s'appuient sur les travaux de M [Wütrich](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308) qui proposaient d'adapter la fonction de perte des modèles de machine learning au cas poissonien (déviance de poisson) pour pouvoir appliquer les techniques de ML à des problèmes d'estimation de la fréquence de sinistres.
-
-Cette approche diffère des consignes du Hackathon qui préconisaient de minimiser le RMSE. En effet, cette fonction d'erreur suppose une distribution normale, ce qui dans les cas de tarfication où la fréquence de sinistre est faible n'est pas réaliste.
-
-Dans le suite de ce rapport, on ne s'intéressera qu'à la modélisation de la fréquence.
-
-Soit $N_{i}$ le nombre de sinistre de la police ${i}$, alors dans le modèle Poisson homogène on suppose $N_{i} \sim \mathscr{P}(\lambda \nu_{i})$ où $\nu_{i}$ est l'exposition au risque de la police $i$, $\lambda$ est la fréquence de sinistre annuelle (homogène sur le portefeuille)et $\mathscr{P}$ la loi de Poisson.
-On pose $Y_{i} = \frac{N_{i}}{\nu_{i}}$ la fréquence annuelle des sinistres pour la police $i$ et $\mathbf{x_{i}} = (x_{1},x_{2}, \cdots, x_{q}) $ les $q$ caractéristiques de la police $i$.
-
-En tarification, on suppose dans les faits que $\lambda$ dépende de $\mathbf{x}$, de sorte que $\mathbb{P}[Y=k/\nu] = \mathbb{P}[N=k] = e^{-\lambda(\mathbf{x})\nu} \frac{(\lambda(\mathbf{x})\nu)^{k}}{k!}$ avec $ln(\lambda(\mathbf{x})) = \beta_{0} + \beta_{1}x_{1} + \beta_{2}x_{2} + \cdots + \beta_{q}x_{q} \overset{def}{=} \langle \mathbf{\beta}, \mathbf{x} \rangle$
-
-Lorsqu'on utilise les approches classiques de GLM, on estime $\hat{\lambda}$ en utilisant l'estimateur du maximum de vraisemblance $\hat{\beta}$ de $\beta$.
-
-Cet estimateur peut être obtenu soit en maximisant la log vraisemblance, soit en minimisant la déviance de Poisson.
-
-Une première adaptation des modèles classiques consiste donc à définir la déviance de poisson comme fonction de perte des algorithmes de ML.
-
-En complément, lorsqu'on utilise un GLM incluant un intercept et sa fonction de lien canonique, l'utilisatiuon d'un estimateur du maximum de vraisemblance apporte de bonnes propriétés pour son usage en tarification dont celle dite d'*équilibre* (Property 2.4 p33 de [Data Analytics for Non-Life Insurance Pricing](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308)), qui précise que :
-
-$\displaystyle\sum_{i=1}^{n} \nu_i\hat{\lambda}(\mathbf{x_{i}}) = \displaystyle\sum_{i=1}^{n} \nu_i exp\langle \mathbf{\hat{\beta}}, \mathbf{x_{i}} \rangle = \displaystyle\sum_{i=1}^{n} N_{i}$
-
-De sorte que le nombre total de sinistres estimés est égale au nombre total de sinistres observés. 
-
-Cette propriété semble même plus étendue dans les modèles GLM puisque cet équilibre se retrouve au global du portefeuille et pour toute modalité des variables catégorielles (dixit l'introduction de [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635))
-
-Il semble toutefois que ce ne soit pas le cas pour les modèles de ML, même lorque ceux-ci sont paramétrer pour minimiser la déviance de Poisson. [Wütrich](https://www.tandfonline.com/doi/pdf/10.1080/24754269.2021.1877960?needAccess=true) attribue cet effet aux méthodes d'arrêt précoce des algorithme d'optimisation utilisés.
-L'explication qualitative produite est que les modèles de ML, par leur plus grande souplesse, permettent un meilleurajustement aux réponses individuelles. Toutefois, ceux-ci n'incluent pas de contraintes d'équilibre au niveau du portefeuille, de sorte que ce meilleur ajustement local peut créer un biais (potentiellement important) au niveau global.
-
-Si cette propriété n'est pas respectée, il s'agit là d'un frein important à l'utilisation des modèles ML (non modifiés) en tarification, puisque l'assureur ne disposerait plus de garanties d'équilibre financier global entre son encaissement et les sinsitres qu'il s'est engagé à régler.
-
-C'est le sens de l'article [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635)) qui propose de se servir des primes estimées lors d'ue première étape par les modèles ML comme d'entrants pour une deuxième étape d'autocalibration locale. Cette méthode consiste à ajuster des modèles GLM locaux réduits à un intercept sur des ensembles de points qui sont définis à partir de la proximité des primes estimées par ML (l'étape de ML rassemble les observations qui se ressemblent, l'étape locale GLM lisse les écarts entre observations voisines pour retrouver les propriétés d'équilibre). 
-
-
-
-Soit $\mu_{i}(x_{i}) = \mathbb{E}[Y_{i}|\mathbf{X} = \mathbf{x_{i}}]$
-Dans la 
-
-
-
-
-
-
-Ce TD est donc l'occasion de poursuivre l'analyse de ce jeu de données et d'explorer l'usage de packages et d'approches développés par MV Wütrich et disponible sur le site de l'[association suisse des actuaires](https://www.actuarialdatascience.org/ADS-Lectures/Courses/).
 
 # Analyse
 
@@ -175,35 +129,8 @@ LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly
 
 ```{r echo=FALSE}
 
-plot_obs<-function(dt,feature) {
-  
-      fig <- dt %>% plot_ly()
-      fig <- fig %>% add_trace(
-                     x= dt[[feature]], y= dt[['EXPO']], type = 'bar', name = 'Exposition',
-                     marker = list(color = '#C9EFF9'),
-                     hoverinfo = "text",
-                     text = ~paste(round(EXPO,0), ' années risque')
-                  )
-      fig<- fig %>% add_trace(
-                     x= dt[[feature]], y= dt[['Freq']], type = 'scatter', mode = 'lines', yaxis = 'y2', name= 'Fréquence',
-                     hoverinfo = "text",
-                     text = ~paste(round(Freq*100,2), '%')
-                    )
-      fig <- fig %>% layout(title = paste0('Fréquence de sinistres par ', feature),
-               xaxis = list(title = ""),
-               yaxis = list(side = 'left', title = 'Exposition', showgrid = FALSE, zeroline = FALSE),
-               yaxis2 = list(side = 'right', overlaying = "y", title = 'Fréquence', showgrid = FALSE, zeroline = FALSE))
-      
-      
-      return(fig)
-}
 
-```
-
-```{r echo=FALSE}
-
-
-plot_obs_2<-function(df,feature,use_year=T) {
+plot_obs<-function(df,feature,use_year=T) {
 
     if (use_year) {
           dt <-df %>%
@@ -278,9 +205,9 @@ resume <- function(df, feature) {
                 )
     )
   
-    fig1<- plot_obs_2(df, feature, use_year = F)
+    fig1<- plot_obs(df, feature, use_year = F)
     
-    fig2<- plot_obs_2(df, feature, use_year = T)
+    fig2<- plot_obs(df, feature, use_year = T)
     
     return(list(dt=dt, table=table, fig=fig1, figyr=fig2))
 }
@@ -921,7 +848,7 @@ mrh <- expo_train %>%
       replace_na(list('NB'=0, 'COUT'=0))
 ```
 
-N'ayant pas accèsau fichier de test utilisé lors du KAckathon, on dissocie ici le fichier mrh en un fichier `train` (70%), un fichier `val` (20%) et un fichier `test` (10%)
+N'ayant pas accès au fichier de test utilisé lors du Hackathon, on dissocie ici le fichier mrh en un fichier `train` (70%), un fichier `val` (20%) et un fichier `test` (10%)
 
 ```{r}
 set.seed(42)
