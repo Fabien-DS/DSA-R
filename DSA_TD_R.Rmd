@@ -751,6 +751,36 @@ summary(fit_glm)
 ```
 Le modèle n'explique qu'une faible partie de la variabilité.
 
+```{r}
+fit_glm_Diag <- data.frame(df_train,
+                     link = predict(fit_glm, type = "link"),
+                     fit = predict(fit_glm, type = "response"),
+                     pearson = residuals(fit_glm, type = "pearson"),
+                     resid = residuals(fit_glm, type = "response"),
+                     residSqr = residuals(fit_glm, type = "response")^2
+                     )
+
+```
+
+```{r}
+
+dat <- fit_glm_Diag %>%
+       select( fit, pearson) %>%
+       mutate(quantile = ntile(fit, 150)) %>%
+       group_by(quantile) %>%
+       summarize(mean_fit = mean(fit, na.rm = TRUE), mean_pearson = mean(pearson, na.rm = TRUE))
+
+
+ggplot(dat, aes(x = mean_fit, y = mean_pearson)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 0, size = 1, color="red") + 
+  ggtitle("Rédidus de Pearson aggrégés")
+  
+```
+
+
+
+
 ## Modèle de Gradient Boosting
 
 Pour la mise en place d'un modèle GBM, nous utiliserons le package `h2o` :
