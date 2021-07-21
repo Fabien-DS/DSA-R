@@ -10,6 +10,7 @@ output:
     toc_depth: 4
     number_sections: true
     theme: lumen
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
@@ -122,7 +123,7 @@ LoadPackage <- function (load.lib=c("")) {
 }
 
 
-LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly', 'xgboost', 'flashlight', 'MetricsWeighted', 'corrplot', 'lsr', 'h2o'))
+LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly', 'xgboost', 'flashlight', 'MetricsWeighted', 'corrplot', 'lsr', 'h2o', 'wesanderson', 'locfit'))
 ```
 
 ## code
@@ -228,7 +229,7 @@ Le projet suit un portefeuille d'assurance MRH suivi sur plusieurs années de 20
 Le fichier `expo_train.csv` contient la liste des contrats en risques historiquement suivis :
 
 ```{r}
-expo_train = read.table(file = here('data', 'raw', 'expo_train.csv'), header=T, sep=',', dec='.', encoding = 'UTF-8', stringsAsFactors = F)
+expo_train = read.table(file = here('data', 'raw', 'expo_train.csv'), header=T, sep=',', dec='.', encoding = 'UTF-8', stringsAsFactors = T)
 
 datatable(head(expo_train))
 
@@ -324,7 +325,7 @@ variable catégorielle indiquant l'année d'observation du risque : `2016`, `201
 Le fichier `expo_train.csv` contient la liste des contrats en risques historiquement suivis :
 
 ```{r}
-sin_train = read.table(file = here('data', 'raw', 'sin_train.csv'), header=T, sep=';', dec=',', encoding = 'UTF-8', stringsAsFactors = F)
+sin_train = read.table(file = here('data', 'raw', 'sin_train.csv'), header=T, sep=';', dec=',', encoding = 'UTF-8', stringsAsFactors = T)
 
 datatable(head(sin_train))
 
@@ -509,6 +510,7 @@ res$figyr
 ```
 
 **ENSEIGNEMENT** : La fréquence augmente globalement avec la valeur des biens selon une relation non linéaire
+Par ailleurs au delà de 50k, l'expérience n'est pas stable. Les modalités supérieures à 80K devraient être groupées.
 
 #### OBJETS_DE_VALEUR
 
@@ -680,14 +682,19 @@ res$fig
 preprocess<- function(dt) {
             res <- dt %>%
             mutate( 
+              Y = NB/EXPO, #calcul de la fréquence pour XGB qui ne supporte pas les offset, mais accepte les poids
               NB_PIECES = ifelse(is.na(NB_PIECES), 2, NB_PIECES), #2 est le mode de NB_PIECES
               NBSIN_TYPE1_AN1 = ifelse(NBSIN_TYPE1_AN1==0,0,1), #On regroupe les modalités non stables dans le temps
               NBSIN_TYPE1_AN3 = ifelse(NBSIN_TYPE1_AN3==0,0,1), #On regroupe les modalités non stables dans le temps
               REGION =  gsub('[0-9]', '', ZONIER), #création de région
+              VALEUR_DES_BIENS = pmin(VALEUR_DES_BIENS, 50000), # On regroupe les valeurs des biens supérieurs à 80k
               OFFSET = log(EXPO) # création d'une variable d'offset qui servira pour le gbm
             ) %>%
-            select(-c('X', 'TYPE_HABITATION', 'NIVEAU_JURIDIQUE', 'NBSIN_TYPE1_AN2', 'NBSIN_TYPE2_AN1', 'NBSIN_TYPE2_AN2', 'NBSIN_TYPE2_AN3'  )) %>% # On supprime les variables sans lien stable dans le temps
-            relocate('id', 'EXPO', 'FORMULE', 'TYPE_RESIDENCE', 'SITUATION_JURIDIQUE', 'OBJETS_DE_VALEUR', 'VALEUR_DES_BIENS', 'NB_PIECES', 'ZONIER', 'REGION', 'NBSIN_TYPE1_AN1', 'NBSIN_TYPE1_AN3', 'ANNEE', 'NB', 'COUT' )
+            mutate( REGION = as.factor(REGION),
+                    VALEUR_DES_BIENS = as.factor(VALEUR_DES_BIENS)
+            ) %>%
+            select(-c('X', 'TYPE_HABITATION', 'NIVEAU_JURIDIQUE', 'NBSIN_TYPE1_AN2', 'NBSIN_TYPE2_AN1', 'NBSIN_TYPE2_AN2', 'NBSIN_TYPE2_AN3', 'ZONIER'  )) %>% # On supprime les variables sans lien stable dans le temps
+            relocate('id', 'EXPO', 'FORMULE', 'TYPE_RESIDENCE', 'SITUATION_JURIDIQUE', 'OBJETS_DE_VALEUR', 'VALEUR_DES_BIENS', 'NB_PIECES',  'REGION', 'NBSIN_TYPE1_AN1', 'NBSIN_TYPE1_AN3', 'ANNEE', 'NB', 'Y', 'COUT' )
 
             return(res)
 }
@@ -702,7 +709,7 @@ df_test <- preprocess(mrh_test)
 On mesude l'association des variables entre elles
 
 ```{r}
-X_train <- df_train %>% select(-c('id', 'EXPO', 'NB', 'COUT'))
+X_train <- df_train %>% select(-c('id', 'EXPO', 'NB', 'Y', 'COUT'))
 
 
 # Initialize empty matrix to store coefficients
@@ -731,6 +738,13 @@ corrplot(cor_matrix)
 Dans cette partie, on essaye de modéliser la fréquence des sinistres.
 
 
+```{r}
+summary(df_test$NB)
+```
+
+
+
+
 ## Modèle de référence
 On commence par une modélisation de référence réduite à un modèle GLM POisson avec un unique intercept.
 ```{r}
@@ -751,22 +765,27 @@ summary(fit_glm)
 ```
 Le modèle n'explique qu'une faible partie de la variabilité.
 
-```{r}
-fit_glm_Diag <- data.frame(df_train,
-                     link = predict(fit_glm, type = "link"),
-                     fit = predict(fit_glm, type = "response"),
-                     pearson = residuals(fit_glm, type = "pearson"),
-                     resid = residuals(fit_glm, type = "response"),
-                     residSqr = residuals(fit_glm, type = "response")^2
-                     )
+Par ailleurs la variable SITUATION_JURIDIQUE (qui n'a que 2 niveaux) n'a finalement pas d'impact sur le risque et peut donc être exclue du modèle :
 
+```{r}
+
+fit_glm <- glm(NB ~ FORMULE + TYPE_RESIDENCE + OBJETS_DE_VALEUR + as.factor(VALEUR_DES_BIENS) + as.factor(NB_PIECES) + REGION + as.factor(NBSIN_TYPE1_AN1) + as.factor(NBSIN_TYPE1_AN3) + as.factor(ANNEE), 
+              data=df_train, offset=OFFSET, family=quasipoisson())
+
+summary(fit_glm)
 ```
 
+
 ```{r}
+
+fit_glm_Diag <- data.frame(df_test,
+                     fit = predict(fit_glm, newdata = df_test, type="response")
+                     ) %>%
+                     mutate(pearson = (NB-fit)/sqrt(fit))
 
 dat <- fit_glm_Diag %>%
        select( fit, pearson) %>%
-       mutate(quantile = ntile(fit, 150)) %>%
+       mutate(quantile = ntile(fit, 16000)) %>%
        group_by(quantile) %>%
        summarize(mean_fit = mean(fit, na.rm = TRUE), mean_pearson = mean(pearson, na.rm = TRUE))
 
@@ -774,42 +793,187 @@ dat <- fit_glm_Diag %>%
 ggplot(dat, aes(x = mean_fit, y = mean_pearson)) +
   geom_point() +
   geom_abline(intercept = 0, slope = 0, size = 1, color="red") + 
-  ggtitle("Rédidus de Pearson aggrégés")
+  ggtitle("Rédidus de Pearson aggrégés - test - GLM")
   
 ```
 
+```{r}
+round(sum(fit_glm_Diag$fit)/sum(df_test$EXPO),4)
 
+round(sum(df_test$NB)/sum(df_test$EXPO),4)
+```
+
+```{r}
+fit_glm_Diag %>% 
+  mutate(residual = NB-fit) %>%
+  summarize(rmse  = sqrt(mean(residual^2)))
+```
+
+```{r}
+summary(df_test$NB)
+summary(fit_glm_Diag$fit)
+```
+
+```{r}
+clrpal4 = wes_palette("Darjeeling1")[c(1,2,3,5)]
+
+
+hist(fit_glm_Diag$fit, breaks = 50, xlim=c(0,.08),col=clrpal4[1],border="white",
+     main="",xlab="Premium (GLM)",ylab="",ylim=c(0,2000))
+```
 
 
 ## Modèle de Gradient Boosting
 
+
 Pour la mise en place d'un modèle GBM, nous utiliserons le package `h2o` :
-```{r echo=F}
+```{r echo=T, results='hide', message=FALSE, warning=FALSE}
 h2o.init(nthreads = -1)
 ```
+```{r}
+h2o.no_progress()
+```
+
+
+Ce package permet de définir une [fonction de perte](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/data-science/algo-params/distribution.html) correspondant à la déviance de Poisson avec sa fonction de lien canonique, c'est à dire le `ln` dans notre cas. 
+Par ailleurs, la méthode permet de définir une colonne qui peut servir d'offset. D'après la [documentation](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/data-science/gbm.html), cet offset est appliqué dans l'espace linéarisé : 
+
+> For other distributions, the offset corrections are applied in the linearized space before applying the inverse link function to get the actual response values.
+
+Il nous faut donc passer en valeur le $ln(EXPO)$ que nous avons renseigné dans la variable `OFFSET` :
+
 
 ```{r cache=T}
-reg_bst_100 = h2o.gbm(y = 'NB', x = names(df_train),
+fit_gbm = h2o.gbm(y = 'NB', x = names(df_train)[3:12],
                        distribution = "poisson",
                        offset_column = "OFFSET",
+                       stopping_metric = "deviance",
                        training_frame = as.h2o(df_train),
                        validation_frame = as.h2o(df_val),
-                       ntrees = 100,
+                       ntrees = 60,
                        nfolds = 5,
                        seed = 1)
 
 ```
 
+
+
 ```{r}
-plot(reg_bst_100)
+## Depth 10 is usually plenty of depth for most datasets, but you never know
+hyper_params = list( max_depth = seq(1,15,2) )
+#hyper_params = list( max_depth = c(4,6,8,12,16,20) ) ##faster for larger datasets
+
+
+grid <- h2o.grid(
+  ## hyper parameters
+  hyper_params = hyper_params,
+  ## full Cartesian hyper-parameter search
+  search_criteria = list(strategy = "Cartesian"),
+  ## which algorithm to run
+  algorithm="gbm",
+  ## identifier for the grid, to later retrieve it
+  grid_id="Grid_gbm_offset",
+  ## standard model parameters
+  distribution = "poisson",
+  x = names(df_train)[3:12],
+  y = 'NB',
+  offset_column = "OFFSET",
+  training_frame = as.h2o(df_train),
+  validation_frame = as.h2o(df_val),
+
+  ## more trees is better if the learning rate is small enough
+  ## here, use "more than enough" trees - we have early stopping
+  ntrees = 10000,
+  ## smaller learning rate is better
+  ## since we have learning_rate_annealing, we can afford to start with a bigger learning rate
+  learn_rate = 0.05,
+  ## learning rate annealing: learning_rate shrinks by 1% after every tree
+  ## (use 1.00 to disable, but then lower the learning_rate)
+  learn_rate_annealing = 0.99,
+  ## sample 80% of rows per tree
+  sample_rate = 0.8,
+  ## sample 80% of columns per split
+  col_sample_rate = 0.8,
+  ## fix a random number generator seed for reproducibility
+  seed = 1234,
+  ## early stopping once the validation AUC doesn't improve by at least 0.01% for 5 consecutive scoring events
+  stopping_rounds = 5,
+  stopping_tolerance = 1e-4,
+  stopping_metric = "deviance",
+  ## score every 10 trees to make early stopping reproducible (it depends on the scoring interval)
+  score_tree_interval = 10
+)
+## by default, display the grid search results sorted by increasing logloss (since this is a classification task)
+grid
+
 ```
 
 
 
+```{r}
+fit_gbm <- h2o.getModel(grid@model_ids[[1]])
+
+```
+
+```{r}
+print(h2o.performance(fit_gbm, newdata = as.h2o(df_val)))
+```
+```{r}
+plot(fit_gbm)
+```
+
+
+
+```{r}
+h2o.performance(fit_gbm, newdata = as.h2o(df_test))
+```
+
+
+```{r}
+fit_gbm_Diag <- data.frame(df_test,
+                     fit = as.vector(h2o.predict(object = fit_gbm, newdata=as.h2o(df_test)))
+                     ) %>%
+                     mutate(pearson = (NB-fit)/sqrt(fit))
+
+
+dat_gbm <- fit_gbm_Diag %>%
+       select( fit, pearson) %>%
+       mutate(quantile = ntile(fit, 16000)) %>%
+       group_by(quantile) %>%
+       summarize(mean_fit = mean(fit, na.rm = TRUE), mean_pearson = mean(pearson, na.rm = TRUE))
+
+
+ggplot(dat_gbm, aes(x = mean_fit, y = mean_pearson)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 0, size = 1, color="red") + 
+  ggtitle("Rédidus de Pearson aggrégés - test - GBM")
+
+```
+```{r}
+round(sum(fit_gbm_Diag$fit)/sum(df_test$EXPO),4)
+
+round(sum(df_test$NB)/sum(df_test$EXPO),4)
+```
+
+```{r}
+fit_gbm_Diag %>% 
+  mutate(residual = NB-fit) %>%
+  summarize(rmse  = sqrt(mean(residual^2)))
+```
+```{r}
+summary(fit_gbm_Diag$fit)
+```
+
+```{r}
+hist(fit_gbm_Diag$fit, breaks = 100, xlim=c(0,.08),col=clrpal4[2],border="white",
+     main="",xlab="Premium (GBM)",ylab="",ylim=c(0,4000))
+```
+
+## Modèle de XGBoost
 
 ```{r}
 x <- c('FORMULE', 'TYPE_RESIDENCE', 'SITUATION_JURIDIQUE','OBJETS_DE_VALEUR', 'VALEUR_DES_BIENS', 'NB_PIECES', 'REGION', 'NBSIN_TYPE1_AN1', 'NBSIN_TYPE1_AN3', 'ANNEE')
-y <- 'NB'
+y <- 'Y'
 w <- 'EXPO'
 ```
 
@@ -835,6 +999,9 @@ params_freq <- list(
   colsample_bytree = 1,
   subsample = 0.9
 )
+
+
+
 # Fit
 set.seed(1)
 fit_xgb <- xgb.train(
@@ -852,6 +1019,47 @@ fit_xgb <- xgb.load("xgb.model")
 
 ```
 
+
+```{r}
+fit_xgb_Diag <- data.frame(df_test,
+                     fit = predict(fit_xgb, prep_xgb(df_test, x))
+                     ) %>%
+                     mutate(pearson = (NB-fit)/sqrt(fit))
+
+
+dat_xgb <- fit_xgb_Diag %>%
+       select( fit, pearson) %>%
+       mutate(quantile = ntile(fit, 16000)) %>%
+       group_by(quantile) %>%
+       summarize(mean_fit = mean(fit, na.rm = TRUE), mean_pearson = mean(pearson, na.rm = TRUE))
+
+
+ggplot(dat_xgb, aes(x = mean_fit, y = mean_pearson)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 0, size = 1, color="red") + 
+  ggtitle("Rédidus de Pearson aggrégés - test - XGB")
+
+```
+
+```{r}
+round(sum(fit_xgb_Diag$fit)/sum(df_test$EXPO),4)
+
+round(sum(df_test$NB)/sum(df_test$EXPO),4)
+```
+
+
+```{r}
+fit_xgb_Diag %>% 
+  mutate(residual = NB-fit) %>%
+  summarize(rmse  = sqrt(mean(residual^2)))
+```
+
+```{r}
+hist(fit_xgb_Diag$fit, breaks = 200, xlim=c(0,.08),col=clrpal4[3],border="white",
+     main="",xlab="Premium (GBM)",ylab="",ylim=c(0,4000))
+```
+
+
 # Model Explanations
 
 The models are ready, so let's shed light into them.
@@ -861,6 +1069,8 @@ The models are ready, so let's shed light into them.
 We start by setting up the explainers. These are basically objects that know how to create predictions.
 
 **Crucial: the prediction function needs to work for subsets of datasets, not just for the original model data set.**
+
+
 
 ```{r}
 fl_glm <- flashlight(
@@ -873,19 +1083,16 @@ fl_xgb <- flashlight(
   predict_function = function(fit, X) predict(fit, prep_xgb(X, x))
 )
 
-fl_xgb <- flashlight(
-  model = fit_xgb, label = "H20 GBM", 
-  predict_function = function(fit, X) predict(fit, prep_xgb(X, x))
+fl_gbm <- flashlight(
+  model = fit_gbm, label = "H20 GBM", 
+  predict_function = function(fit, X) as.vector(h2o.predict(object = fit_gbm, newdata=as.h2o(X)))
 )
-
-reg_bst_100
-
 
 
 # Combine them and add common elements like reference data
 metrics <- list(`Average deviance` = deviance_poisson, 
                 `Relative deviance reduction` = r_squared_poisson)
-fls <- multiflashlight(list(fl_glm, fl_xgb), data = df_val, 
+fls <- multiflashlight(list(fl_glm, fl_xgb, fl_gbm), data = df_test, 
                        y = y, w = w, metrics = metrics)
 # Version on canonical scale
 fls_log <- multiflashlight(fls, linkinv = log)
@@ -919,7 +1126,7 @@ Taking the average of many ICE curves produces the famous partial dependence plo
 ```{r}
 plot(light_profile(fls, v = "VALEUR_DES_BIENS"))
 plot(light_profile(fls, v = "NB_PIECES"))
-plot(light_profile(fls, v = "TYPE_RESIDENCE"))
+plot(light_profile(fls, v = "REGION"))
 
 ```
 
@@ -942,9 +1149,9 @@ plot(light_profile(fls, v = "NB_PIECES", type = "response"))
 We often get a good picture of the effect of a covariable by combining partial dependence with classic plots.
 
 ```{r}
-eff_DrivAge <- light_effects(fls, v = "NB_PIECES", counts_weighted = TRUE)
-p <- plot(eff_DrivAge, show_points = FALSE)
-plot_counts(p, eff_DrivAge, alpha = 0.3)
+eff_NB_PIECES <- light_effects(fls, v = "NB_PIECES", counts_weighted = TRUE)
+p <- plot(eff_NB_PIECES, show_points = FALSE)
+plot_counts(p, eff_NB_PIECES, alpha = 0.3)
 ```
 
 ```{r}
@@ -983,26 +1190,180 @@ Let's illustrate a strong and a weak interaction by conditional partial dependen
 # plot_counts(p, eff_DrivAge, alpha = 0.3)
 
 
-pdp_NBPIECES_REGION <- light_profile(fls_log, v = "NB_PIECES", by = "REGION", 
+pdp_VALEUR_DES_BIENS_REGION <- light_profile(fls_log, v = "VALEUR_DES_BIENS", by = "REGION", 
                                   pd_seed = 50, data = df_val, counts_weighted=TRUE)
-p <- plot(pdp_NBPIECES_REGION, show_points = FALSE)
-pdp_count <- light_effects(fls, v = "NB_PIECES")
+p <- plot(pdp_VALEUR_DES_BIENS_REGION, show_points = FALSE)
+pdp_count <- light_effects(fls, v = "REGION")
 plot_counts(p, pdp_count, alpha = 0.3)
 
-pdp_VALEURDESBIENS_REGION <- light_profile(fls_log, v = "VALEUR_DES_BIENS", by = "REGION", 
+pdp_VALEURDESBIENS_TYPE_RESIDENCE <- light_profile(fls_log, v = "VALEUR_DES_BIENS", by = "TYPE_RESIDENCE", 
                                   pd_seed = 50, data = df_val, counts_weighted=TRUE)
-plot(pdp_VALEURDESBIENS_REGION)
+plot(pdp_VALEURDESBIENS_TYPE_RESIDENCE)
 
 # Weak interaction
-pdp_TYPE_RESIDENCE_REGION <- light_profile(fls_log, v = "TYPE_RESIDENCE", 
-                                 by = "REGION", pd_seed = 50, data = df_val, counts_weighted=TRUE)
-plot(pdp_TYPE_RESIDENCE_REGION)
+pdp_TYPE_RESIDENCE_NB_PIECES <- light_profile(fls_log, v = "TYPE_RESIDENCE", 
+                                 by = "NB_PIECES", pd_seed = 50, data = df_val, counts_weighted=TRUE)
+plot(pdp_TYPE_RESIDENCE_NB_PIECES)
+```
+
+## Primes
+
+Comme on l'a vu à la section précédente, le jeu de données est assez simple et offre peu d'opportunités de prise en compte d'effets non linéaires. Néanmoins même dans ces conditions on peut observer que si le modèles GLM et GBM sont assez proches de la référence observée sur le portefeuille, on observe que le XGBoost surestime dans ce cas de presque 19% la charge au global :
+
+```{r}
+
+dat = df_val
+
+ref <- data.frame(modeles=c('référence', 'GLM', 'GBM', 'XGB'))
+ref$primesmoy = c(sum(dat$NB)/sum(dat$EXPO),
+                  sum(fl_glm$predict_function(fit_glm, dat))/sum(dat$EXPO),
+                  sum(fl_gbm$predict_function(fit_gbm, dat))/sum(dat$EXPO),
+                  sum(fl_xgb$predict_function(fit_xgb, dat))/sum(dat$EXPO)
+)
+ref <- ref%>%
+       mutate(PctECART = primesmoy/ (sum(dat$NB)/sum(dat$EXPO)) -1 ) %>%
+       mutate(PctECART = sprintf("%.1f %%", 100*PctECART) )
+ref
+
 ```
 
 ```{r}
-summary(df_val$NB/df_val$EXPO)
-summary(fl_glm$predict_function(fit_glm, df_val))
-summary(fl_xgb$predict_function(fit_xgb, df_val))
+
+dat = df_test
+valid_prime_glm = fl_glm$predict_function(fit_glm, dat)
+valid_prime_gbm = fl_gbm$predict_function(fit_gbm, dat)
+valid_prime_xgb = fl_xgb$predict_function(fit_xgb, dat)
+
+
+par(mfrow=c(1,3))
+hist(valid_prime_glm, breaks = 100,xlim=c(0,.08),col=clrpal4[1],border="white",
+     main="",xlab="Primes estimées (GLM)",ylab="",ylim=c(0,3000))
+hist(valid_prime_gbm, breaks = 100,xlim=c(0,.08),col=clrpal4[2],border="white",
+     main="",xlab="Primes estimées (GBM)",ylab="",ylim=c(0,3000))
+hist(valid_prime_xgb, breaks = 100,xlim=c(0,.08),col=clrpal4[3],border="white",
+     main="",xlab="Primes estimées (XGB)",ylab="",ylim=c(0,3000))
 ```
 
-fls
+```{r}
+dat = df_val
+valid_prime_glm = fl_glm$predict_function(fit_glm, dat)
+valid_prime_gbm = fl_gbm$predict_function(fit_gbm, dat)
+valid_prime_xgb = fl_xgb$predict_function(fit_xgb, dat)
+
+
+fit_loc_glm = locfit.raw(x=valid_prime_glm, 
+                 y=df_val[,"Y"],
+                 weights=df_val[,"EXPO"], 
+                 kern="rect",deg=0,alpha=.05)
+fit_loc_gbm = locfit.raw(x=valid_prime_gbm, 
+                 y=df_val[,"Y"],
+                 weights=df_val[,"EXPO"], 
+                 kern="rect",deg=0,alpha=.05)
+fit_loc_xgb = locfit.raw(x=valid_prime_xgb, 
+                 y=df_val[,"Y"],
+                 weights=df_val[,"EXPO"], 
+                 kern="rect",deg=0,alpha=.05)
+```
+
+```{r}
+
+par(mfrow=c(1,3))
+
+plot(cbind(valid_prime_glm, df_val$Y),lwd=3,col=clrpal4[1],xlim=c(0,.08),xlab="Primes estimées (GLM)",ylab="",ylim=c(0,.08))
+abline(a=0,b=1,lwd=.4)
+plot(fit_loc_gbm,lwd=3,col=clrpal4[2],xlim=c(0,.08),xlab="Primes estimées (GBM)",ylab="",ylim=c(0,.08))
+abline(a=0,b=1,lwd=.4)
+plot(fit_loc_xgb,lwd=3,col=clrpal4[3],xlim=c(0,.08),xlab="Primes estimées (XGB)",ylab="",ylim=c(0,.08))
+abline(a=0,b=1,lwd=.4)
+```
+```{r}
+summary(df_val$NB/df_val$EXPO)
+summary(valid_prime_glm)
+```
+
+
+
+```{r}
+p_glm = predict(fit_loc_glm, newdata = valid_prime_glm)
+p_gbm = predict(fit_loc_gbm, newdata = valid_prime_gbm)
+p_xgb = predict(fit_loc_xgb, newdata = valid_prime_xgb)
+
+
+
+valid_prime_glm_bc = p_glm
+valid_prime_gbm_bc = p_gbm
+valid_prime_xgb_bc = p_xgb
+
+```
+
+```{r}
+fit_loc_glm_bc = locfit.raw(x=valid_prime_glm_bc, 
+                 y=df_val[,"Y"],
+                 weights=df_val[,"EXPO"], 
+                 kern="rect",deg=0,alpha=.05)
+fit_loc_gbm_bc = locfit.raw(x=valid_prime_gbm_bc, 
+                 y=df_val[,"Y"],
+                 weights=df_val[,"EXPO"], 
+                 kern="rect",deg=0,alpha=.05)
+fit_loc_xgb_bc = locfit.raw(x=valid_prime_xgb_bc, 
+                 y=df_val[,"Y"],
+                 weights=df_val[,"EXPO"], 
+                 kern="rect",deg=0,alpha=.05)
+```
+
+```{r}
+
+par(mfrow=c(1,3))
+
+plot(fit_loc_glm_bc,lwd=3,col=clrpal4[1],xlim=c(0,.08),xlab="Primes estimées équilibrées (GLM)",ylab="",ylim=c(0,.08))
+lines(fit_loc_glm,col=scales::alpha(clrpal4[1],.4))
+abline(a=0,b=1,lwd=.4)
+plot(fit_loc_gbm_bc,lwd=3,col=clrpal4[2],xlim=c(0,.08),xlab="Primes estimées équilibrées (GBM)",ylab="",ylim=c(0,.08))
+lines(fit_loc_gbm,col=scales::alpha(clrpal4[2],.4))
+abline(a=0,b=1,lwd=.4)
+plot(fit_loc_xgb_bc,lwd=3,col=clrpal4[3],xlim=c(0,.08),xlab="Primes estimées équilibrées (XGB)",ylab="",ylim=c(0,.08))
+lines(fit_loc_xgb,col=scales::alpha(clrpal4[3],.4))
+abline(a=0,b=1,lwd=.4)
+```
+
+```{r}
+dat <- df_val
+
+ref <- data.frame(modeles=c('référence', 'GLM', 'GBM', 'XGB'))
+ref$primesmoy = c(sum(dat$NB)/sum(dat$EXPO),
+                  sum(valid_prime_glm)/sum(dat$EXPO),
+                  sum(valid_prime_gbm)/sum(dat$EXPO),
+                  sum(valid_prime_xgb)/sum(dat$EXPO)
+)
+ref$primesmoy_eq = c(sum(dat$NB)/sum(dat$EXPO),
+                  sum(valid_prime_glm_bc)/sum(dat$EXPO),
+                  sum(valid_prime_gbm_bc)/sum(dat$EXPO),
+                  sum(valid_prime_xgb_bc)/sum(dat$EXPO)
+)
+
+
+ref <- ref%>%
+       mutate(PctECART = primesmoy/ (sum(dat$NB)/sum(dat$EXPO)) -1, 
+              PctECART_eq = primesmoy_eq/ (sum(dat$NB)/sum(dat$EXPO)) -1
+              ) %>%
+       mutate(
+              PctECART = sprintf("%.1f %%", 100*PctECART),
+              PctECART_eq = sprintf("%.1f %%", 100*PctECART_eq)
+              ) %>%
+       relocate(modeles, primesmoy, PctECART, primesmoy_eq, PctECART_eq)
+
+ref
+
+```
+
+```{r}
+summary(valid_prime_xgb_bc)
+```
+
+
+
+
+
+
+
+

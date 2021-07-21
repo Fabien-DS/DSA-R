@@ -1,10 +1,4 @@
 base
-methods
-datasets
-utils
-grDevices
-graphics
-stats
 here
 ggplot2
 dplyr
@@ -20,3 +14,4 @@ MetricsWeighted
 corrplot
 lsr
 h2o
+wesanderson
