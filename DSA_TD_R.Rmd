@@ -11,6 +11,9 @@ output:
     number_sections: true
     theme: lumen
     code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: sentence
 ---
 
 ```{r setup, include=FALSE}
@@ -23,14 +26,12 @@ Ce projet s'inscrit dans le cadre de la formation [DSA](https://www.institut-du-
 
 Le thème de ce projet est libre.
 
-
-> J'ai choisi d'étudier une série d'articles qui m'ont frappé sur la comparaison des approches classiques par modèles linéaires généralisés (`GLM`) et par machine learning (ci après `ML`) dans le cadre de la tarification en assurance non-vie et la manière dont elles pouvaient se compléter.
-
+> J'ai choisi d'étudier la manière dont les approches de machine learning (ci après `ML`) peuvent compléter les approches classiques par modèles linéaires généralisés (`GLM`) dans le cadre de la tarification en assurance non-vie.
 
 ## Les bonnes propriétés du GLM dans le cadre d'une modélisation de la fréquence de sinistres
 
 Soit $N_{i}$ le nombre de sinistre de la police ${i}$, alors dans le modèle Poisson homogène on suppose $N_{i} \sim \mathscr{P}(\lambda \nu_{i})$ où $\nu_{i}$ est l'exposition au risque de la police $i$, $\lambda$ est la fréquence de sinistre annuelle (homogène sur le portefeuille)et $\mathscr{P}$ la loi de Poisson.
-On pose $Y_{i} = \frac{N_{i}}{\nu_{i}}$ la fréquence annuelle des sinistres pour la police $i$ et $ \mathbf{x_{i}} = (x_{1},x_{2},\cdots, x_{q}) $ les $q$ caractéristiques de la police $i$.
+On pose $Y_{i} = \frac{N_{i}}{\nu_{i}}$ la fréquence annuelle des sinistres pour la police $i$ et $\mathbf{x_{i}}=(x_{1},x_{2},..., x_{q})$ les $q$ caractéristiques de la police $i$.
 
 En tarification, on suppose dans les faits que $\lambda$ dépend de $\mathbf{x}$, de sorte que $\mathbb{P}[Y=k/\nu] = \mathbb{P}[N=k] = e^{-\lambda(\mathbf{x})\nu} \frac{(\lambda(\mathbf{x})\nu)^{k}}{k!}$ avec $ln(\lambda(\mathbf{x})) = \beta_{0} + \beta_{1}x_{1} + \beta_{2}x_{2} + \cdots + \beta_{q}x_{q} \overset{def}{=} \langle \mathbf{\beta}, \mathbf{x} \rangle$ en complétant $\mathbf{x}$ par $x_{0} = 1$.
 
@@ -42,36 +43,35 @@ En complément, lorsqu'on utilise un GLM incluant un intercept et sa fonction de
 
 $\displaystyle\sum_{i=1}^{n} \nu_i\hat{\lambda}(\mathbf{x_{i}}) = \displaystyle\sum_{i=1}^{n} \nu_i exp\langle \mathbf{\hat{\beta}}, \mathbf{x_{i}} \rangle = \displaystyle\sum_{i=1}^{n} N_{i}$
 
-De sorte que le nombre total de sinistres estimés est égale au nombre total de sinistres observés. 
+De sorte que le nombre total de sinistres estimés est égale au nombre total de sinistres observés.
 
-Cette propriété est même plus étendue dans certains modèles GLM, notamment lorsque le modèle poissonien avec lien log (exemple (b) p423 de [A systematic relationship between minimum bias and gener- alized linear models](https://www.casact.org/sites/default/files/2021-02/pubs_proceed_proceed99_99317.pdf)) :  dans ce cas l'équilibre existe au globaldu portefeuille, mais aussi pour chaque classe des variables catégorielles incluses dans le modèle.
+Cette propriété est même plus étendue dans certains modèles GLM, notamment lorsque le modèle poissonien avec lien log (exemple (b) p423 de [A systematic relationship between minimum bias and gener- alized linear models](https://www.casact.org/sites/default/files/2021-02/pubs_proceed_proceed99_99317.pdf)) : dans ce cas l'équilibre existe au global du portefeuille, mais aussi pour chaque classe des variables catégorielles incluses dans le modèle.
 
 **Ces propriétés d'équilibres sont critiques pour un assureur** dans un exercice de tarification, puisqu'elles assurent qu'une structure tarifaire basée sur cette approche lui permettra d'équilibrer (au moins théoriquement) ses encaissement avec les sinistres qu'il s'est engagé à indemniser.
 
 Le GLM est donc interprétable, souple à l'usage et présente des propriétés d'équilibre global et local.
-Néanmoins son ajustement nécessite un temps humain important et le praticien doit s'en remettre à son expérience pour estimer les éventuelles interactions à inclure dans son analyse. 
+Néanmoins son ajustement nécessite un temps humain important et le praticien doit s'en remettre à son expérience pour estimer les éventuelles interactions à inclure dans son analyse.
 
 ## L'apport et les limites des modèles ML en tarification
 
 Les modèles ML par leur grande flexibilité sont des candidats naturels pour remplacer ou à minima compléter les modèles GLM du fait de leur performance sur une grande variété de cas d'usages ces dernières années.
 Toutefois, ces modèles nécessitent qulques ajustements avant de pouvoir être utilisés dans des problèmes de tarification.
 
-### Ajustement #1 : définition de la fonction de perte
+### Ajustement \#1 : définition de la fonction de perte
 
 Une première adaptation des modèles classiques consiste donc à **définir la déviance de poisson comme fonction de perte des algorithmes de ML**.
 
 C'est notamment l'approche préconisée par dans [Data Analytics for Non-Life Insurance Pricing](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2870308) de Mario V. Wuthrich et Christoph Buser.
 
-Cette approche a notamment conduit à l'article [Boosting insights in insurance tariff plans with tree-based machine learning methods](https://arxiv.org/abs/1904.10890) et la créatuon du package [distRforest](https://github.com/henckr/distRforest).
-NB : le package `rpart` inclut la déviance de poisson, mais ne permet de définir simplement une fonction de déviance appropriée pour la sévérité (lognormale ou gamma)
-
 ### Limites de la modification de la fonction de perte
 
-La définition d'une fonction de perte appropriée est devenue l'approche par défaut de l'utilisation des méthodes ML en tarification. Néanmoins, dès 2019 Wütrich remarqua que les sinistres estimés par les modèles ML ne correspondaient pas à la sinistralité observée sur le portefeuille, même sur le jeu d'entraînement
+La définition d'une fonction de perte appropriée est devenue l'approche par défaut de l'utilisation des méthodes ML en tarification.
+Néanmoins, dès 2019 Wütrich remarqua que les sinistres estimés par les modèles ML ne correspondaient pas à la sinistralité observée sur le portefeuille, même sur le jeu d'entraînement
 
 > Il semble que l'utilisation directe de modèles de ML, mêmes adaptés pour minimiser la déviance, ne présentent pas les garanties d'équilibre des GLM.
 
-Les modèles de ML permettent une meilleurs corrélation avec la réponse individuelle de chaque police, du fait de la plus grande flexibilité accordée à la forme de la contribution (éventuellement non linéaire) de chaque variable à la sortie. Toutefois, cette meilleure corrélation s'obtient au prix de l'abandon de la notion d'équilibre.
+Les modèles de ML permettent une meilleurs corrélation avec la réponse individuelle de chaque police, du fait de la plus grande flexibilité accordée à la forme de la contribution (éventuellement non linéaire) de chaque variable à la sortie.
+Toutefois, cette meilleure corrélation s'obtient au prix de l'abandon de la notion d'équilibre.
 En effet, aucune garantie n'est expressément introduite au global du portefeuille ce qui peut produire des divergences, potentiellement importantes, entre la somme des primes demandées et les sinistres que l'assureur s'est engagé à régler.
 
 Cet effet est attribué par M Wütrich aux conditions d'arrêt précoce des algorithmes d'optimisation utilisés par les modèles ML.
@@ -80,25 +80,28 @@ Cet effet est attribué par M Wütrich aux conditions d'arrêt précoce des algo
 
 Deux options s'offrent dès lors à l'actuaire :
 
-1. essayer d'extraire des informations de la manière dont les modèles ML ont appris les efefts des variables sur la sortie pour compléter les GLM classiquement manipulés avec l'objectiof de combler en partie l'écart de performance (s'il est important) avec le modèle ML tout en conservant les propriiétés et l'interprétabilité naturelle des modèles GLM. C'est la voie suivie par l'article [Peeking into the black box](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) de Christian Lorentzen et Michael Mayer
+1.  essayer d'extraire des informations de la manière dont les modèles ML ont appris les efefts des variables sur la sortie pour compléter les GLM classiquement manipulés avec l'objectiof de combler en partie l'écart de performance (s'il est important) avec le modèle ML tout en conservant les propriiétés et l'interprétabilité naturelle des modèles GLM.
+    C'est la voie suivie par l'article [Peeking into the black box](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) de Christian Lorentzen et Michael Mayer
 
-2. corriger les approches ML en les combinant avec une approche GLM pour en récupérér les propriétés. Le gain de cette approche devrait être plus important que pour la méthode précédente tout en présentant les propriétés d'équilibre des modèles ML sans toutefois apporter l'interprétabilité de ces modèles. C'est la proposition de  de Michel Denuit, Arthur Charpentier et Julien Trufin dans [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635) repartent du constat de Wütrich et proposent une solution de contournement sous la forme d'un ajustement en deux temps successifs :
+2.  corriger les approches ML en les combinant avec une approche GLM pour en récupérér les propriétés.
+    Le gain de cette approche devrait être plus important que pour la méthode précédente tout en présentant les propriétés d'équilibre des modèles ML sans toutefois apporter l'interprétabilité de ces modèles.
+    C'est la proposition de de Michel Denuit, Arthur Charpentier et Julien Trufin dans [Autocalibration and Tweedie-dominance for Insurance Pricing with Machine Learning](https://arxiv.org/abs/2103.03635) repartent du constat de Wütrich et proposent une solution de contournement sous la forme d'un ajustement en deux temps successifs :
 
-    1. Dans un premier temps, un modèle ML est ajusté pour déterminer une première estimation $\hat{\pi}$ des primes théoriques
+    1.  Dans un premier temps, un modèle ML est ajusté pour déterminer une première estimation $\hat{\pi}$ des primes théoriques
 
-    2. Dans un deuxième temps, ces primes théoriques $\hat{\pi}$ sont utilisées comme variable entrante d'un modèle d'autocalibration local pour produire des primes corrigées $\widehat{\pi_{BC}}$. 
-    Cette méthode consiste à ajuster des modèles GLM locaux réduits à un intercept sur des ensembles de points "proches". La notion de proximité ici se fait qui sont définis à partir de la proximité des primes théoriques estimées par ML $\hat{\pi}$ (l'étape de ML rassemble les observations qui se ressemblent, l'étape locale GLM lisse les écarts entre observations voisines pour retrouver les propriétés d'équilibre).  
+    2.  Dans un deuxième temps, ces primes théoriques $\hat{\pi}$ sont utilisées comme variable entrante d'un modèle d'autocalibration local pour produire des primes corrigées $\widehat{\pi_{BC}}$.
+        Cette méthode consiste à ajuster des modèles GLM locaux réduits à un intercept sur des ensembles de points "proches".
+        La notion de proximité ici se fait qui sont définis à partir de la proximité des primes théoriques estimées par ML $\hat{\pi}$ (l'étape de ML rassemble les observations qui se ressemblent, l'étape locale GLM lisse les écarts entre observations voisines pour retrouver les propriétés d'équilibre).
 
 ## Objectif du projet
 
-Dans ce rapport nous prendrons comme prétexte l'analyse du jeu de données tarifaire d'un portefeuille MRH qui nous avait été confié lors du Hackathon pour explorer ces deux approches.
-Ce faisant nous nous écarterons du cadre du Hackathon qui proposait de minimiser le RMSE. 
-Par ailleurs, ne disposant pas du jeu de test, nous ne pourrons comparer ces méthodes avec le leaderbord produit à l'occasion de l'événement.
+Dans ce rapport, faute de temps, nous n'explorerons que l'option 1 en commençant par comparer la performance d'un modèle GLM classique avec un modèle GBM et un modèle XGBoost.
 
-De ce fait, et sans perte de généralité, vis-à-vis du propos des articles, nous nous restreindrons dans la suite de ce document à l'analyse de la seule fréquence des sinistres.
+Nous tâcherons de comprendre la manière dont les modèles ML ont appris les relations entre les variables pour dans un troisième temps proposer une version améliorée du GLM initial.
 
-Dans la section suivante nous présenterons le jeu de données avant d'en entreprendre la modélisation. La dernière section traitera des approches mises en places dans les articles.
+Pour ce faire, nous prendrons comme base d'analyse le jeu de données tarifaire d'un portefeuille MRH qui nous avait été confié lors du Hackathon.
 
+L'enjeu étant surtout d'illustrer le principe, nous nous restreindrons dans la suite de ce document à l'analyse de la seule fréquence des sinistres.
 
 # Analyse
 
@@ -126,7 +129,9 @@ LoadPackage <- function (load.lib=c("")) {
 LoadPackage(c('ggplot2', 'dplyr', 'formattable', 'DT', 'tidyr', 'caret', 'plotly', 'xgboost', 'flashlight', 'MetricsWeighted', 'corrplot', 'lsr', 'h2o', 'wesanderson', 'locfit'))
 ```
 
-## code
+## code pour la phase exploratoire
+
+Dans cette section nous allons définr deux fonctions qui seront utilisées de manière répétées dans la phase exploratoire du jeu de données à savoir une fonction générique de tracé des exprositions et fréquences moyennes de sinistres d'une part et de création de tables synthétiques d'autre part :
 
 ```{r echo=T}
 
@@ -222,7 +227,12 @@ Le jeu de données est constitué de 4 fichiers :
 list.files(path=here('data', 'raw'))
 ```
 
-Le projet suit un portefeuille d'assurance MRH suivi sur plusieurs années de 2016 à 2018 inclus. L'objectif initial du Hackathon est d'estimer les primes 2019 sur un échantillon de contrats.
+Le projet suit un portefeuille d'assurance MRH suivi sur plusieurs années de 2016 à 2018 inclus.
+L'objectif initial du Hackathon est d'estimer les primes 2019 sur un échantillon de contrats.
+
+La nature de la garantie modélisée ne nous a pas été communiquée.
+
+Pour éviter les redondances, les analyses descriptives sont concentrées sur le fichier combiné en fin de section.
 
 ## expo_train
 
@@ -238,87 +248,30 @@ str(expo_train)
 
 Les données ont été prétraitées pour disposer d'**une ligne par période de risque annuelle homogène**.
 
-Pour des raisons d'anonymisation, les identifiants contrats ont été supprimés de sorte qu'il n'est pas possible de suivre l'évolution du risque d'une période sur l'autre. Pour la même raison, il ne sera pas possible dans la construction des jeux de validation et de test de s'assurer que toute l'expérience d'un même assuré est bien intégralement dans un jeu d'entraînement, de validation ou de test.
+Pour des raisons d'anonymisation, les identifiants contrats ont été supprimés de sorte qu'il n'est pas possible de suivre l'évolution du risque d'une période sur l'autre.
+Pour la même raison, il ne sera pas possible dans la construction des jeux de validation et de test de s'assurer que toute l'expérience d'un même assuré est bien intégralement dans un jeu d'entraînement, de validation ou de test.
 
 La signification des colonnes présentes est la suivante :
 
--  **`X`**:
-
-variable non nommée. Il s'agit d'un artefact du processus de création du fichier initial. **On ne la prend pas en compte**
-
--  **`EXPO`** :
-
-exposition en année risque du contrat. Sa valeur précalculée pour chaque ligne est comprise entre 0 et 1
-
--  **`FORMULE`** :
-
-variable catégorielle codant la formule du contrat comprenant 3 niveaux `MEDIUM`, `ESSENTIEL` et `CONFORT`
-
-
- -  **`TYPE_RESIDENCE`** :
-
-variable catégorielle codant le fait que le bien est une résidence `PRINCIPALE`, ou `SECONDAIRE`
-
--  **`TYPE_HABITATION`** :
-
-variable catégorielle codant le fait que le bien est un `APPARTEMENT`, ou une `MAISON`
-
--  **`NB_PIECES`** :
-
-variable numérique indiquant le nombre de pièces du logement
-
--  **`SITUATION_JURIDIQUE`** :
-
-variable catégorielle indiquant si le souscripteur est prorpiétaire (`PROPRIO`) ou locataire (`LOCATAIRE`) du logement assuré
-
-- **`NIVEAU_JURIDIQUE`** :
-
-variable catégorielle codant le niveau de couverture de la garantie juridique
-
--  **`VALEUR_DES_BIENS`** :
-
-variable numérique reflétant la valeur couverte du contenu du logement
-
-- **`OBJETS_DE_VALEUR`** :
-
-variable catégorielle codant le niveau de couverture des objets
-
-- **`ZONIER`** :
-
-variable catégorielle codant la zone du bien assuré. Le code est constitué d'une lettre représentant une zone et d'un nombre représentant une partie de la zone
-
--  **`NBSIN_TYPE1_AN1`** :
-
-variable numérique indiquant le nombre de sinistre de type 1 l'année précédente
-
--  **`NBSIN_TYPE1_AN2`** :
-
-variable numérique indiquant le nombre de sinistre de type 1 il y a 2 ans
-
-
-- **`NBSIN_TYPE1_AN3`** :
-
-variable numérique indiquant le nombre de sinistre de type 1 il y a 3 ans
-
-- **`NBSIN_TYPE2_AN1`** :
-
-variable numérique indiquant le nombre de sinistre de type 2 l'année précédente
-
--  **`NBSIN_TYPE2_AN2`** :
-
-variable numérique indiquant le nombre de sinistre de type 2 il y a 2 ans
-
-- **`NBSIN_TYPE2_AN3`** :
-
-variable numérique indiquant le nombre de sinistre de type 2 il y a 3 ans
-
--  **`id`** :
-
-identifiant du risque, clef de jointure
-
-- **`ANNEE`** :
-
-variable catégorielle indiquant l'année d'observation du risque : `2016`, `2017`, `2018`
+-   **`X`**: variable non nommée. Il s'agit d'un artefact du processus de création du fichier initial. **On ne la prend pas en compte**
+-   **`EXPO`** : exposition en année risque du contrat. Sa valeur précalculée pour chaque ligne est comprise entre 0 et 1
+-   **`FORMULE`** : variable catégorielle codant la formule du contrat comprenant 3 niveaux `MEDIUM`, `ESSENTIEL` et `CONFORT`
+-   **`TYPE_RESIDENCE`** : variable catégorielle codant le fait que le bien est une résidence `PRINCIPALE`, ou `SECONDAIRE`
+-   **`TYPE_HABITATION`** : variable catégorielle codant le fait que le bien est un `APPARTEMENT`, ou une `MAISON`
+-   **`NB_PIECES`** : variable numérique indiquant le nombre de pièces du logement
+-   **`SITUATION_JURIDIQUE`** : variable catégorielle indiquant si le souscripteur est prorpiétaire (`PROPRIO`) ou locataire (`LOCATAIRE`) du logement assuré
+-   **`NIVEAU_JURIDIQUE`** : variable catégorielle codant le niveau de couverture de la garantie juridique
+-   **`VALEUR_DES_BIENS`** : variable numérique reflétant la valeur couverte du contenu du logement
+-   **`OBJETS_DE_VALEUR`** : variable catégorielle codant le niveau de couverture des objets
+-   **`ZONIER`** : variable catégorielle codant la zone du bien assuré. Le code est constitué d'une lettre représentant une zone et d'un nombre représentant une partie de la zone
+-   **`NBSIN_TYPE1_AN1`** : variable numérique indiquant le nombre de sinistre de type 1 l'année précédente
+-   **`NBSIN_TYPE1_AN2`** : variable numérique indiquant le nombre de sinistre de type 1 il y a 2 ans
+-   **`NBSIN_TYPE1_AN3`** : variable numérique indiquant le nombre de sinistre de type 1 il y a 3 ans
+-   **`NBSIN_TYPE2_AN1`** : variable numérique indiquant le nombre de sinistre de type 2 l'année précédente
+-   **`NBSIN_TYPE2_AN2`** : variable numérique indiquant le nombre de sinistre de type 2 il y a 2 ans
+-   **`NBSIN_TYPE2_AN3`** : variable numérique indiquant le nombre de sinistre de type 2 il y a 3 ans
+-   **`id`** : identifiant du risque, clef de jointure
+-   **`ANNEE`** : variable catégorielle indiquant l'année d'observation du risque : `2016`, `2017`, `2018`
 
 ## sin_train
 
@@ -371,7 +324,14 @@ mrh <- expo_train %>%
       replace_na(list('NB'=0, 'COUT'=0))
 ```
 
-N'ayant pas accès au fichier de test utilisé lors du Hackathon, on dissocie ici le fichier mrh en un fichier `train` (70%), un fichier `val` (20%) et un fichier `test` (10%)
+N'ayant pas accès au fichier de test utilisé lors du Hackathon, on dissocie ici le fichier mrh en un fichier `train` (70%), un fichier `val` (20%) et un fichier `test` (10%).
+Cette approche est prise ici sans considération des années d'étude.
+
+C'est un biais fort qui aurait été **rédhibitoire dans la réalité** puisqu'il aurait été de nature à induire des effets de leakage entre les jeu d'entrainement et de test.
+
+Toutefois cette approche a été prise par commodité et pour garder une proportion significative de volume dans les jeux de validation et test et parce que l'enjeu de l'analyse n'est pas nécessairement la performance réelle des algorithmes, mais plutôt la démarche pour augmenter les modèles GLM à partir des informations extraites des modèles ML.
+
+Nous utilisons ici la fonction `createDataPartition` du package `caret` qui permet de faire du stratified sampling par rapport à une variable d'entrée.
 
 ```{r}
 set.seed(42)
@@ -413,7 +373,8 @@ res$figyr
 
 ```
 
-**ENSEIGNEMENT** : Le comportement observé est stable dans le temps. Les niveaux `CONFORT` et `ESSENTIEL` semblent avoir un niveau de risque de fréquence équivalent
+**ENSEIGNEMENT** : Le comportement observé est stable dans le temps.
+Les niveaux `CONFORT` et `ESSENTIEL` semblent avoir un niveau de risque de fréquence équivalent
 
 #### TYPE_RESIDENCE
 
@@ -429,7 +390,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : Le comportement observé est stable dans le temps. Les résidences `SECONDAIRE` ont systématiquement une fréquence moindre
+**ENSEIGNEMENT** : Le comportement observé est stable dans le temps.
+Les résidences `SECONDAIRE` ont systématiquement une fréquence moindre
 
 #### TYPE_HABITATION
 
@@ -445,7 +407,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : Le comportement observé **N'est PAS** stable dans le temps. Le type d'habitation est à exclure.
+**ENSEIGNEMENT** : Le comportement observé **N'est PAS** stable dans le temps.
+Le type d'habitation est à exclure.
 
 #### NB_PIECES
 
@@ -461,7 +424,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : Le `NB_PIECES` présente des valeurs manquantes. La fréquence tend à augmenter avec le nombre de pièces.
+**ENSEIGNEMENT** : Le `NB_PIECES` présente des valeurs manquantes.
+La fréquence tend à augmenter avec le nombre de pièces.
 
 #### SITUATION_JURIDIQUE
 
@@ -493,7 +457,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : Le `NIVEAU_JURIDIQUE` **N'est PAS** stable dans le temps. A exclure.
+**ENSEIGNEMENT** : Le `NIVEAU_JURIDIQUE` **N'est PAS** stable dans le temps.
+A exclure.
 
 #### VALEUR_DES_BIENS
 
@@ -509,8 +474,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : La fréquence augmente globalement avec la valeur des biens selon une relation non linéaire
-Par ailleurs au delà de 50k, l'expérience n'est pas stable. Les modalités supérieures à 80K devraient être groupées.
+**ENSEIGNEMENT** : La fréquence augmente globalement avec la valeur des biens selon une relation non linéaire Par ailleurs au delà de 50k, l'expérience n'est pas stable.
+Les modalités supérieures à 80K devraient être groupées.
 
 #### OBJETS_DE_VALEUR
 
@@ -576,7 +541,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : La fréquence augmente globalement avec le nombre de sinistres de type 1 l'année précédente. Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
+**ENSEIGNEMENT** : La fréquence augmente globalement avec le nombre de sinistres de type 1 l'année précédente.
+Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
 
 #### NBSIN_TYPE1_AN2
 
@@ -610,7 +576,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : La fréquence augmente globalement avec le nombre de sinistres de type 1 il y a 3 ans. Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
+**ENSEIGNEMENT** : La fréquence augmente globalement avec le nombre de sinistres de type 1 il y a 3 ans.
+Toutefois, il semble surtout q'il existe un effet d'une indicatrice a eu sinistre ou non.
 
 #### NBSIN_TYPE2_AN1
 
@@ -626,7 +593,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
+**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence.
+A ne pas retenir.
 
 #### NBSIN_TYPE2_AN2
 
@@ -642,7 +610,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
+**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence.
+A ne pas retenir.
 
 #### NBSIN_TYPE2_AN3
 
@@ -658,7 +627,8 @@ res$fig
 res$figyr
 ```
 
-**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence. A ne pas retenir.
+**ENSEIGNEMENT** : Il n'existe pas de lien stable sur la fréquence.
+A ne pas retenir.
 
 #### ANNEE
 
@@ -673,7 +643,8 @@ res$table
 res$fig
 ```
 
-**ENSEIGNEMENT** : L'année 2016 semble atypique. Le niveau actuel semble plus proche de ceux de 2017 et 2018.
+**ENSEIGNEMENT** : L'année 2016 semble atypique.
+Le niveau actuel semble plus proche de ceux de 2017 et 2018.
 
 ### Nettoyage des données
 
@@ -737,16 +708,14 @@ corrplot(cor_matrix)
 
 Dans cette partie, on essaye de modéliser la fréquence des sinistres.
 
-
 ```{r}
 summary(df_test$NB)
 ```
 
-
-
-
 ## Modèle de référence
+
 On commence par une modélisation de référence réduite à un modèle GLM POisson avec un unique intercept.
+
 ```{r}
 reg0 = glm(NB~1+offset(OFFSET),family=poisson,data=df_train)
 
@@ -754,7 +723,9 @@ summary(reg0)
 ```
 
 ## Modèle GLM plus élaboré
-Il s'agit d'un modèle GLM Poisson classique tirant partie des enseignements de la partie précédente, sans interaction. Les variables sont traitées comme catégorielles pour permettre les effets non linéaires.
+
+Il s'agit d'un modèle GLM Poisson classique tirant partie des enseignements de la partie précédente, sans interaction.
+Les variables sont traitées comme catégorielles pour permettre les effets non linéaires.
 
 ```{r}
 
@@ -763,6 +734,7 @@ fit_glm <- glm(NB ~ FORMULE + TYPE_RESIDENCE + SITUATION_JURIDIQUE + OBJETS_DE_V
 
 summary(fit_glm)
 ```
+
 Le modèle n'explique qu'une faible partie de la variabilité.
 
 Par ailleurs la variable SITUATION_JURIDIQUE (qui n'a que 2 niveaux) n'a finalement pas d'impact sur le risque et peut donc être exclue du modèle :
@@ -774,7 +746,6 @@ fit_glm <- glm(NB ~ FORMULE + TYPE_RESIDENCE + OBJETS_DE_VALEUR + as.factor(VALE
 
 summary(fit_glm)
 ```
-
 
 ```{r}
 
@@ -809,60 +780,31 @@ fit_glm_Diag %>%
   summarize(rmse  = sqrt(mean(residual^2)))
 ```
 
-```{r}
-summary(df_test$NB)
-summary(fit_glm_Diag$fit)
-```
-
-```{r}
-clrpal4 = wes_palette("Darjeeling1")[c(1,2,3,5)]
-
-
-hist(fit_glm_Diag$fit, breaks = 50, xlim=c(0,.08),col=clrpal4[1],border="white",
-     main="",xlab="Premium (GLM)",ylab="",ylim=c(0,2000))
-```
-
 
 ## Modèle de Gradient Boosting
 
-
 Pour la mise en place d'un modèle GBM, nous utiliserons le package `h2o` :
+
 ```{r echo=T, results='hide', message=FALSE, warning=FALSE}
 h2o.init(nthreads = -1)
 ```
+
 ```{r}
 h2o.no_progress()
 ```
 
-
-Ce package permet de définir une [fonction de perte](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/data-science/algo-params/distribution.html) correspondant à la déviance de Poisson avec sa fonction de lien canonique, c'est à dire le `ln` dans notre cas. 
-Par ailleurs, la méthode permet de définir une colonne qui peut servir d'offset. D'après la [documentation](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/data-science/gbm.html), cet offset est appliqué dans l'espace linéarisé : 
+Ce package permet de définir une [fonction de perte](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/data-science/algo-params/distribution.html) correspondant à la déviance de Poisson avec sa fonction de lien canonique, c'est à dire le `ln` dans notre cas.
+Par ailleurs, la méthode permet de définir une colonne qui peut servir d'offset.
+D'après la [documentation](https://docs.h2o.ai/h2o/latest-stable/h2o-docs/data-science/gbm.html), cet offset est appliqué dans l'espace linéarisé :
 
 > For other distributions, the offset corrections are applied in the linearized space before applying the inverse link function to get the actual response values.
 
 Il nous faut donc passer en valeur le $ln(EXPO)$ que nous avons renseigné dans la variable `OFFSET` :
 
-
-```{r cache=T}
-fit_gbm = h2o.gbm(y = 'NB', x = names(df_train)[3:12],
-                       distribution = "poisson",
-                       offset_column = "OFFSET",
-                       stopping_metric = "deviance",
-                       training_frame = as.h2o(df_train),
-                       validation_frame = as.h2o(df_val),
-                       ntrees = 60,
-                       nfolds = 5,
-                       seed = 1)
-
-```
-
-
+En complément nous mettons en oeuvre une recherche par grille pour trouver le métaparamètre de profondeur d'arbre optimal. Le code est adapté de [cet article](https://www.h2o.ai/blog/h2o-gbm-tuning-tutorial-for-r/)
 
 ```{r}
-## Depth 10 is usually plenty of depth for most datasets, but you never know
 hyper_params = list( max_depth = seq(1,15,2) )
-#hyper_params = list( max_depth = c(4,6,8,12,16,20) ) ##faster for larger datasets
-
 
 grid <- h2o.grid(
   ## hyper parameters
@@ -908,26 +850,24 @@ grid
 
 ```
 
-
-
+On récupère le meilleur modèle :
 ```{r}
 fit_gbm <- h2o.getModel(grid@model_ids[[1]])
 
 ```
 
+On vérifie la selection en comparant les performances sur le jeu de validation par rapport aux valeurs affichées dans la grille :
 ```{r}
 print(h2o.performance(fit_gbm, newdata = as.h2o(df_val)))
 ```
+
 ```{r}
 plot(fit_gbm)
 ```
 
-
-
 ```{r}
 h2o.performance(fit_gbm, newdata = as.h2o(df_test))
 ```
-
 
 ```{r}
 fit_gbm_Diag <- data.frame(df_test,
@@ -949,24 +889,12 @@ ggplot(dat_gbm, aes(x = mean_fit, y = mean_pearson)) +
   ggtitle("Rédidus de Pearson aggrégés - test - GBM")
 
 ```
-```{r}
-round(sum(fit_gbm_Diag$fit)/sum(df_test$EXPO),4)
 
-round(sum(df_test$NB)/sum(df_test$EXPO),4)
-```
 
 ```{r}
 fit_gbm_Diag %>% 
   mutate(residual = NB-fit) %>%
   summarize(rmse  = sqrt(mean(residual^2)))
-```
-```{r}
-summary(fit_gbm_Diag$fit)
-```
-
-```{r}
-hist(fit_gbm_Diag$fit, breaks = 100, xlim=c(0,.08),col=clrpal4[2],border="white",
-     main="",xlab="Premium (GBM)",ylab="",ylim=c(0,4000))
 ```
 
 ## Modèle de XGBoost
@@ -1019,7 +947,6 @@ fit_xgb <- xgb.load("xgb.model")
 
 ```
 
-
 ```{r}
 fit_xgb_Diag <- data.frame(df_test,
                      fit = predict(fit_xgb, prep_xgb(df_test, x))
@@ -1041,12 +968,6 @@ ggplot(dat_xgb, aes(x = mean_fit, y = mean_pearson)) +
 
 ```
 
-```{r}
-round(sum(fit_xgb_Diag$fit)/sum(df_test$EXPO),4)
-
-round(sum(df_test$NB)/sum(df_test$EXPO),4)
-```
-
 
 ```{r}
 fit_xgb_Diag %>% 
@@ -1054,23 +975,18 @@ fit_xgb_Diag %>%
   summarize(rmse  = sqrt(mean(residual^2)))
 ```
 
-```{r}
-hist(fit_xgb_Diag$fit, breaks = 200, xlim=c(0,.08),col=clrpal4[3],border="white",
-     main="",xlab="Premium (GBM)",ylab="",ylim=c(0,4000))
-```
 
 
-# Model Explanations
+# Explicabilité des modèles produits
 
-The models are ready, so let's shed light into them.
+Cette section se consacre à l'explicabilité des modèles produits dans le but d'identifier la manière dont les modèles ML exploitent les combinaisons de variables et effets non linéaires.
 
-## Setting up explainers
+Cette section s'appuie sur les travaux présentés dans [Peeking into the black box](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) de Christian Lorentzen et Michael Mayer
 
-We start by setting up the explainers. These are basically objects that know how to create predictions.
+## Modèles de prédiction
 
-**Crucial: the prediction function needs to work for subsets of datasets, not just for the original model data set.**
-
-
+La première étape consiste à définir des objets génériques pour obtenir des prédiction des modèles.
+Nous allons nous appuyer sur le package [flashlight](https://cran.r-project.org/web/packages/flashlight/vignettes/flashlight.html) en définissant un objet par modèle, mais qui aura par la suite le même structure d'appel.
 
 ```{r}
 fl_glm <- flashlight(
@@ -1089,18 +1005,23 @@ fl_gbm <- flashlight(
 )
 
 
-# Combine them and add common elements like reference data
-metrics <- list(`Average deviance` = deviance_poisson, 
-                `Relative deviance reduction` = r_squared_poisson)
+# On combine les différents modèles dans un objet unique disposant des métriques définies ci-dessous
+metrics <- list(
+                `Déviance Poisson` = deviance_poisson, 
+                `R² Déviance Poisson` = r_squared_poisson)
+
+
 fls <- multiflashlight(list(fl_glm, fl_xgb, fl_gbm), data = df_test, 
                        y = y, w = w, metrics = metrics)
-# Version on canonical scale
+
+
+# Variation de l'objet précédent dans l'espace linéarisé
 fls_log <- multiflashlight(fls, linkinv = log)
 ```
 
-## Performance
+## Comparaison de la performance des modèles
 
-We start to interpret the models by looking at model performance using deviance related metrics.
+On commence par comparer la performance globale des modèles ajustés jusqu'à maintenant :
 
 ```{r}
 fillc <- "#E69F00"
@@ -1110,49 +1031,64 @@ plot(perf, geom = "point") +
   labs(x = element_blank(), y = element_blank())
 ```
 
-## Importance
-
-Next, we consider permutation variable importance. By default `flashlight` uses the first performance metric specified above.
+Du point de vue de la déviance de Poisson, les différents modèles présentent des performances comparables avec un léger avantage au modèke XGBoost.
+C'est un des éléments qui était préssenti : le jeu de donné ne semble pas permettre une mise en avant des méthodes non linéaires.
+Un des poinst saillants est la faible fréquence moyenne observée de l'orde de 2,12% soit un écart type de 14,55%.
 
 ```{r}
-imp <- light_importance(fls, v = x)
+sprintf('férquence moyenne : %.2f%%', tx*100)
+sprintf('férquence écart type : %.2f%%', sqrt(tx)*100)
+```
+
+Cela explique en partie la faible part de variabilité expliquée par les modèles.
+
+## Importance
+
+On peut ensuite regarder l'importance (au sens permutation) des variables dans chaque modèle.
+Une version de décomposition de Shapley est disponible mais trop lente pour les moyens à disposition pour ce projet.
+
+```{r}
+imp <- light_importance(fls, v = x, type = 'permutation')
 plot(imp, fill = fillc, color = "black")
 ```
 
 ### Partial dependence curves
 
-Taking the average of many ICE curves produces the famous partial dependence plot. We consider such plots for four predictors.
+Pour comprendre la manière dont les différentes varoables contribuent en moyennes au prédiction des modèles on peut s'appuyer sur les pdp.
+On représente ici les pdp des 3 variables les plus importantes à priori issues de la section précédente :
 
 ```{r}
-plot(light_profile(fls, v = "VALEUR_DES_BIENS"))
-plot(light_profile(fls, v = "NB_PIECES"))
 plot(light_profile(fls, v = "REGION"))
+plot(light_profile(fls, v = "VALEUR_DES_BIENS"))
+plot(light_profile(fls, v = "FORMULE"))
 
 ```
 
-## Classic diagnostic plots
+On peut remarquer que si de légères différences existent dans le niveau relatif de chaque modalité, les 3 modèles sont globalement en accord sur la forme des réponses.
 
-Classic predicted/residual/response versus covariable plots are worth a look.
+### Comparaison des différences de prise en compte de l'effet de la variable VALEUR_DES_BIENS
+
+Dans le graphique ci-dessous on superpose le tri à plat des réponses observées, des prédictions du modèle (en prenant toutes les variables en considération) et les pdp.
+Ce graphique donne une intuition de la manière dont un variable contribue en moyenne aux performance du modèle et en fonction des zones sur lesquelles il existe plus ou moins d'exposition.
+On y observe par exemple que la réponse combinée du XGBoost est la plus proche de la réponse observée (comme attendu par rapport aux performances globales du modèle).
 
 ```{r}
-# Average predicted versus covariable
-plot(light_profile(fls, v = "NB_PIECES", type = "predicted"))
-# Average residual versus covariable
-plot(light_profile(fls, v = "NB_PIECES", type = "residual")) +
-  geom_hline(yintercept = 0)
-# Average response versus covariable
-plot(light_profile(fls, v = "NB_PIECES", type = "response"))
+eff_VALEUR_DES_BIENS <- light_effects(fls, v = "VALEUR_DES_BIENS", counts_weighted = TRUE)
+p <- plot(eff_VALEUR_DES_BIENS, show_points = FALSE)
+plot_counts(p, eff_VALEUR_DES_BIENS, alpha = 0.3)
 ```
 
-### Multiple aspects combined
+Ce qui est plus surprenant c'est le désaccord qu'ont les modèles sur l'effet des biens de 3500 Eur, qui est portant la modalité qui dispose du plus d'exposition.
+Le XGBoost y voit :
 
-We often get a good picture of the effect of a covariable by combining partial dependence with classic plots.
+-   un effet important plus importants que les autres modèles
 
-```{r}
-eff_NB_PIECES <- light_effects(fls, v = "NB_PIECES", counts_weighted = TRUE)
-p <- plot(eff_NB_PIECES, show_points = FALSE)
-plot_counts(p, eff_NB_PIECES, alpha = 0.3)
-```
+-   un effet relatif d'un bien à 3500 Eur bien plus important que celui d'un bien de valeur nulle.
+
+### Analyse des intéractions
+
+Un des points délicats de l'analyse des GLM est l'identification des intéractions potentielles à prendre en compte, là où les méthodes à base d'arbre n'ont pas cette difficulté.
+Le graphique suivant se base se le H de Friedman qui calcule l'effet de la pdp croisée nette des effets multipliés des pdp univariées :
 
 ```{r}
 interact_rel <- light_interaction(
@@ -1166,7 +1102,11 @@ interact_rel <- light_interaction(
 plot(interact_rel, color = "black", fill = fillc, rotate_x = TRUE)
 ```
 
-### On absolute scale
+On y observe que (par construction) le modèle GLM n'inclut aucune intéraction, là où les modèles XGBoost et GBM en considèrent.
+Toutefois les deux modèles d'arbres n'ont pas la même vision de l'importance de ces intéractions.
+Si les deux s'accordent sur l'existence d'une intéraction entre VALEUR_DES_BIENS et TYPE_RESIDENCE, XGBoost accorde par ailleurs de l'importance à l'intéraction VALEUR_DES_BIENS et NB_PIECES, là où GBM y voit un intérêt marginal.
+Les effets ici sont normalisés.
+On peut aussi les représenter dans leur valeur absolue :
 
 ```{r}
 interact_abs <- light_interaction(
@@ -1180,190 +1120,83 @@ interact_abs <- light_interaction(
 plot(interact_abs, color = "black", fill = fillc, rotate_x = TRUE)
 ```
 
-### Visualization
+### Visualisation
 
-Let's illustrate a strong and a weak interaction by conditional partial dependence plots.
+Pour essayer de comprendre la forme de ces intéractions, on peut représenter les pdp d'une variable en fonction des modalités d'une autre :
 
 ```{r}
-# Strong interaction
-# p <- plot(eff_DrivAge, show_points = FALSE)
-# plot_counts(p, eff_DrivAge, alpha = 0.3)
-
-
-pdp_VALEUR_DES_BIENS_REGION <- light_profile(fls_log, v = "VALEUR_DES_BIENS", by = "REGION", 
+#Intéractions fortes
+pdp_VALEUR_DES_BIENS_NB_PIECES <- light_profile(fls_log, v = "VALEUR_DES_BIENS", by = "NB_PIECES", 
                                   pd_seed = 50, data = df_val, counts_weighted=TRUE)
-p <- plot(pdp_VALEUR_DES_BIENS_REGION, show_points = FALSE)
-pdp_count <- light_effects(fls, v = "REGION")
-plot_counts(p, pdp_count, alpha = 0.3)
+plot(pdp_VALEUR_DES_BIENS_NB_PIECES)
+
 
 pdp_VALEURDESBIENS_TYPE_RESIDENCE <- light_profile(fls_log, v = "VALEUR_DES_BIENS", by = "TYPE_RESIDENCE", 
                                   pd_seed = 50, data = df_val, counts_weighted=TRUE)
 plot(pdp_VALEURDESBIENS_TYPE_RESIDENCE)
 
-# Weak interaction
+
+# Intéractions faibles
 pdp_TYPE_RESIDENCE_NB_PIECES <- light_profile(fls_log, v = "TYPE_RESIDENCE", 
                                  by = "NB_PIECES", pd_seed = 50, data = df_val, counts_weighted=TRUE)
 plot(pdp_TYPE_RESIDENCE_NB_PIECES)
 ```
 
-## Primes
+Le premier graphique entre VALEUR_DES_BIENS et NB_PIECES est très intéressant et illustre à la fois une divergence de vue entre les modèles et explique la forme de la réponse moyenne de la VALER_DES_BIENS du XGBoost précédement vue.
 
-Comme on l'a vu à la section précédente, le jeu de données est assez simple et offre peu d'opportunités de prise en compte d'effets non linéaires. Néanmoins même dans ces conditions on peut observer que si le modèles GLM et GBM sont assez proches de la référence observée sur le portefeuille, on observe que le XGBoost surestime dans ce cas de presque 19% la charge au global :
+En effet tous les modèles s'accordent sur une croissance du risque avec le nombre de pièces.
+Par ailleurs, le GLM comme le XGBoost s'accordent sur un risque très inférieur sur les biens de valeur nulle sans pièces (c'est la limite de cet exercice sur des données anonymisées, il n'est pas possible de revenir auprès du métier pour comprendre le rationnel de ce codage).
+Par contre, le GLM, sans intéraction, se voit contraint d'accorder un risque homogène en fonction de la valeur du bien, là où le XGBoost, plus libre accorde un niveau de risque beaucoup plsu important aux biens sans pièce, mais de valeur non nulle.
+En outre le XGBoost comme le GBM dans une moindre mesure sur une décroissance du risque des biens de valeur intermédiaire.
+
+En complément XGBoost comme GBM s'accordent sur un plafonnement du risque pour les résidences secondaires en fonction de la valeur des biens (contrairement aux résidences principales).
+
+# Apport dans la modélisation GLM
+
+Fort des constats précédents on peut créer un nouveau GLM incluant une intéraction entre la VALEUR_DES_BIENS et le NB_PIECES.
+Cette étape nécessite des allers retours en fonction de l'évolution de la pertinence des variabes dans le modèle suite à cette adjunction.
+Idéalement il aurait fallu créer une nouvelle variable NB_PIECES avec 2 modalités 0 et 1+ et créer une intéraction avec cette dernière pour recréer l'effet plateau sans augmenter de manière indue le nombre de paramètres du modèle.
 
 ```{r}
 
-dat = df_val
+fit_glm_opti <- glm(NB ~ FORMULE + TYPE_RESIDENCE + OBJETS_DE_VALEUR + as.factor(VALEUR_DES_BIENS)+ REGION + as.factor(NBSIN_TYPE1_AN1) + as.factor(NBSIN_TYPE1_AN3) + as.factor(ANNEE) + as.factor(VALEUR_DES_BIENS):NB_PIECES,
+              data=df_train, offset=OFFSET, family=quasipoisson())
 
-ref <- data.frame(modeles=c('référence', 'GLM', 'GBM', 'XGB'))
-ref$primesmoy = c(sum(dat$NB)/sum(dat$EXPO),
-                  sum(fl_glm$predict_function(fit_glm, dat))/sum(dat$EXPO),
-                  sum(fl_gbm$predict_function(fit_gbm, dat))/sum(dat$EXPO),
-                  sum(fl_xgb$predict_function(fit_xgb, dat))/sum(dat$EXPO)
-)
-ref <- ref%>%
-       mutate(PctECART = primesmoy/ (sum(dat$NB)/sum(dat$EXPO)) -1 ) %>%
-       mutate(PctECART = sprintf("%.1f %%", 100*PctECART) )
-ref
-
+summary(fit_glm_opti)
 ```
 
-```{r}
-
-dat = df_test
-valid_prime_glm = fl_glm$predict_function(fit_glm, dat)
-valid_prime_gbm = fl_gbm$predict_function(fit_gbm, dat)
-valid_prime_xgb = fl_xgb$predict_function(fit_xgb, dat)
-
-
-par(mfrow=c(1,3))
-hist(valid_prime_glm, breaks = 100,xlim=c(0,.08),col=clrpal4[1],border="white",
-     main="",xlab="Primes estimées (GLM)",ylab="",ylim=c(0,3000))
-hist(valid_prime_gbm, breaks = 100,xlim=c(0,.08),col=clrpal4[2],border="white",
-     main="",xlab="Primes estimées (GBM)",ylab="",ylim=c(0,3000))
-hist(valid_prime_xgb, breaks = 100,xlim=c(0,.08),col=clrpal4[3],border="white",
-     main="",xlab="Primes estimées (XGB)",ylab="",ylim=c(0,3000))
-```
-
-```{r}
-dat = df_val
-valid_prime_glm = fl_glm$predict_function(fit_glm, dat)
-valid_prime_gbm = fl_gbm$predict_function(fit_gbm, dat)
-valid_prime_xgb = fl_xgb$predict_function(fit_xgb, dat)
-
-
-fit_loc_glm = locfit.raw(x=valid_prime_glm, 
-                 y=df_val[,"Y"],
-                 weights=df_val[,"EXPO"], 
-                 kern="rect",deg=0,alpha=.05)
-fit_loc_gbm = locfit.raw(x=valid_prime_gbm, 
-                 y=df_val[,"Y"],
-                 weights=df_val[,"EXPO"], 
-                 kern="rect",deg=0,alpha=.05)
-fit_loc_xgb = locfit.raw(x=valid_prime_xgb, 
-                 y=df_val[,"Y"],
-                 weights=df_val[,"EXPO"], 
-                 kern="rect",deg=0,alpha=.05)
-```
+On peut alors rajouter ce modèle à notre corpus et en comparer la performance :
 
 ```{r}
 
-par(mfrow=c(1,3))
-
-plot(cbind(valid_prime_glm, df_val$Y),lwd=3,col=clrpal4[1],xlim=c(0,.08),xlab="Primes estimées (GLM)",ylab="",ylim=c(0,.08))
-abline(a=0,b=1,lwd=.4)
-plot(fit_loc_gbm,lwd=3,col=clrpal4[2],xlim=c(0,.08),xlab="Primes estimées (GBM)",ylab="",ylim=c(0,.08))
-abline(a=0,b=1,lwd=.4)
-plot(fit_loc_xgb,lwd=3,col=clrpal4[3],xlim=c(0,.08),xlab="Primes estimées (XGB)",ylab="",ylim=c(0,.08))
-abline(a=0,b=1,lwd=.4)
-```
-```{r}
-summary(df_val$NB/df_val$EXPO)
-summary(valid_prime_glm)
-```
-
-
-
-```{r}
-p_glm = predict(fit_loc_glm, newdata = valid_prime_glm)
-p_gbm = predict(fit_loc_gbm, newdata = valid_prime_gbm)
-p_xgb = predict(fit_loc_xgb, newdata = valid_prime_xgb)
-
-
-
-valid_prime_glm_bc = p_glm
-valid_prime_gbm_bc = p_gbm
-valid_prime_xgb_bc = p_xgb
-
-```
-
-```{r}
-fit_loc_glm_bc = locfit.raw(x=valid_prime_glm_bc, 
-                 y=df_val[,"Y"],
-                 weights=df_val[,"EXPO"], 
-                 kern="rect",deg=0,alpha=.05)
-fit_loc_gbm_bc = locfit.raw(x=valid_prime_gbm_bc, 
-                 y=df_val[,"Y"],
-                 weights=df_val[,"EXPO"], 
-                 kern="rect",deg=0,alpha=.05)
-fit_loc_xgb_bc = locfit.raw(x=valid_prime_xgb_bc, 
-                 y=df_val[,"Y"],
-                 weights=df_val[,"EXPO"], 
-                 kern="rect",deg=0,alpha=.05)
-```
-
-```{r}
-
-par(mfrow=c(1,3))
-
-plot(fit_loc_glm_bc,lwd=3,col=clrpal4[1],xlim=c(0,.08),xlab="Primes estimées équilibrées (GLM)",ylab="",ylim=c(0,.08))
-lines(fit_loc_glm,col=scales::alpha(clrpal4[1],.4))
-abline(a=0,b=1,lwd=.4)
-plot(fit_loc_gbm_bc,lwd=3,col=clrpal4[2],xlim=c(0,.08),xlab="Primes estimées équilibrées (GBM)",ylab="",ylim=c(0,.08))
-lines(fit_loc_gbm,col=scales::alpha(clrpal4[2],.4))
-abline(a=0,b=1,lwd=.4)
-plot(fit_loc_xgb_bc,lwd=3,col=clrpal4[3],xlim=c(0,.08),xlab="Primes estimées équilibrées (XGB)",ylab="",ylim=c(0,.08))
-lines(fit_loc_xgb,col=scales::alpha(clrpal4[3],.4))
-abline(a=0,b=1,lwd=.4)
-```
-
-```{r}
-dat <- df_val
-
-ref <- data.frame(modeles=c('référence', 'GLM', 'GBM', 'XGB'))
-ref$primesmoy = c(sum(dat$NB)/sum(dat$EXPO),
-                  sum(valid_prime_glm)/sum(dat$EXPO),
-                  sum(valid_prime_gbm)/sum(dat$EXPO),
-                  sum(valid_prime_xgb)/sum(dat$EXPO)
-)
-ref$primesmoy_eq = c(sum(dat$NB)/sum(dat$EXPO),
-                  sum(valid_prime_glm_bc)/sum(dat$EXPO),
-                  sum(valid_prime_gbm_bc)/sum(dat$EXPO),
-                  sum(valid_prime_xgb_bc)/sum(dat$EXPO)
+fl_glm_opti <- flashlight(
+  model = fit_glm_opti, label = "GLM_opti", 
+  predict_function = function(fit, X) predict(fit, X, type = "response")
 )
 
 
-ref <- ref%>%
-       mutate(PctECART = primesmoy/ (sum(dat$NB)/sum(dat$EXPO)) -1, 
-              PctECART_eq = primesmoy_eq/ (sum(dat$NB)/sum(dat$EXPO)) -1
-              ) %>%
-       mutate(
-              PctECART = sprintf("%.1f %%", 100*PctECART),
-              PctECART_eq = sprintf("%.1f %%", 100*PctECART_eq)
-              ) %>%
-       relocate(modeles, primesmoy, PctECART, primesmoy_eq, PctECART_eq)
+# On combine les différents modèles dans un objet unique disposant des métriques définies ci-dessous
 
-ref
+fls_opti <- multiflashlight(list(fl_glm, fl_glm_opti, fl_xgb, fl_gbm), data = df_test, 
+                       y = y, w = w, metrics = metrics)
 
+
+# Variation de l'objet précédent dans l'espace linéarisé
+fls_log_opti <- multiflashlight(fls, linkinv = log)
 ```
 
 ```{r}
-summary(valid_prime_xgb_bc)
+fillc <- "#E69F00"
+perf_opti <- light_performance(fls_opti)
+perf_opti
+plot(perf_opti, geom = "point") +
+  labs(x = element_blank(), y = element_blank())
 ```
 
+Le gain ici reste marginal et mériterait d'être encore travaillé par rapport aux autres intéractions détectées dans les modèles, néanmoins elle illustre la manière dont les enseignements des modèles ML peuvent être explicités et servir de guide dans l'amélioration de modèles GLM.
 
+# Conclusion
 
-
-
-
-
-
+Ce TD a été l'occasion de poursuivre le travail entrepris lors du Hackathon.
+Ce jeu de données n'était peut-être pas le plus adapté du fait de la simplicité de sa structure et de la faible fréquence et donc l'importance de la variabilité du phénomène suivi.
+Néanmoins il nous a permi de remprendre la démarche présentée dans [Peeking into the black box](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3595944) pour illustrer comment les approches de ML peuvent utilement aiguiller le praticien dans la construction des GLM qui sont prédominant dans les études tarifaires en entreprise.
